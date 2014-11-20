@@ -1,0 +1,20 @@
+* Actuator Position Control via EtherNet/IP
+
+  The =cpppo_positioner= module allows control of the position of a set of
+  actuators, by initiating a communication channel, and issuing new position
+  directives via the actuator state machine.  The current state is polled as
+  necessary via EtherNet/IP CIP read commands, and data updates and state
+  changes are performed via EtherNet/IP CIP writes.
+
+** Installing
+
+   Clone the repository, and run the setup.py installer:
+   : $ git clone git@github.com:pjkundert/cpppo_positioner.git
+   : $ cd cpppo_positioner
+   : $ python setup.py install
+   : $ python
+   : Python 2.7.6 (default, Sep  9 2014, 15:04:36)
+   : [GCC 4.2.1 Compatible Apple LLVM 6.0 (clang-600.0.39)] on darwin
+   : Type "help", "copyright", "credits" or "license" for more information.
+   : >>> import cpppo_positioner
+   : >>>
