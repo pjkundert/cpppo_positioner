@@ -18,3 +18,21 @@
    : Type "help", "copyright", "credits" or "license" for more information.
    : >>> import cpppo_positioner
    : >>>
+
+** Command- or Pipe-line usage
+
+   An executable module entry point (=python -m cpppo_positioner=), and a
+   convenience executable script (=cpppo_positioner=) are supplied.
+   
+   If your application generates a stream of actuator position data, or if you
+   have some manual positions you wish to move to, you can use the command-line
+   interface.  You may supply one or more actuator positions in blobs of JSON
+   data (an actual position would have more entries, such as =acceleration=,
+   =deceleration=, =timeout=, ...):
+   : $ position='{ "actuator": 0, "position": 12345, "speed": 100 }'
+
+   These positions may be supplied either as single parameters on the command
+   line, or as separate lines of input (if standard input is selected, by
+   supplying a '-' option):
+   : $ python -m cpppo_positioner --address gateway -v "$position"
+   : $ echo "$position" | cpppo_positioner --address gateway -v -

@@ -4,14 +4,12 @@ import os, sys
 here = os.path.abspath( os.path.dirname( __file__ ))
 exec( open( 'version.py', 'r' ).read() )
 
-# Presently the pymodbus-based Modbus/TCP scripts are only compatible with Python2, as is web.py.
-# So, make web.py and pymodbus requirements optional.  The argparse module wasn't included 'til
-# Python 2.7, but is available for installation in prior versions.
 console_scripts			= [
-    'cpppo_position	= cpppo_positioner.main:main',
+    'cpppo_positioner		= cpppo_positioner.main:main',
 ]
 
 install_requires		= open( os.path.join( here, "requirements.txt" )).readlines()
+# The argparse module wasn't included 'til Python 2.7, but is available for prior versions.
 if sys.version_info[0:2] < (2,7):
     install_requires.append( "argparse" )
 
