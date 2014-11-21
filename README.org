@@ -57,8 +57,8 @@
     : ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
     :     Expecting property name: line 1 column 3 (char 2)
 
-    So, the only way to do this is to use the strange =\`"= double-escape,
-    directly as a command-line argument:
+    So, the only way to do this is to use the strange back-slash + back-tick
+    double-escape, directly as a command-line argument:
     : PS > python -m cpppo_positioner --address gateway -v '{ \`"actuator\`": 0, ... }'
 
     Recommendation: use Linux or Mac, or install Cygwin and use bash on
