@@ -36,3 +36,30 @@
    supplying a '-' option):
    : $ python -m cpppo_positioner --address gateway -v "$position"
    : $ echo "$position" | cpppo_positioner --address gateway -v -
+
+*** Quoting double-quotes on Windows Powershell
+
+    Note that on Windows Cmd or Powershell, it is very difficult to quote
+    double-quote characters in strings.  In Powershell, you need to use the
+    =\`"= (bash-slash + back-tick) before each double-quote.  Unexpectedly,
+    using a single-quoted string does *not* allow you to contain double-quotes.
+
+    You can get double quotes into a string:
+    : PS > $position = '{ "actuator": 0, "position": 12345, "speed": 100 }'
+    : PS > $position
+    : '{ "actuator": 0, "position": 12345, "speed": 100 }'
+    : PS >
+
+    However, when you try to use them, they are re-interpreted on inclusion in a
+    command:
+    : PS > python -m cpppo_positioner --address gateway -v "$position"
+    : PS > python -m cpppo_positioner -v "$position"
+    : ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
+    :     Expecting property name: line 1 column 3 (char 2)
+
+    So, the only way to do this is to use the strange =\`"= double-escape,
+    directly as a command-line argument:
+    : PS > python -m cpppo_positioner --address gateway -v '{ \`"actuator\`": 0, ... }'
+
+    Recommendation: use Linux or Mac, or install Cygwin and use bash on
+    Windows.  Trust me; this is just the tip of the iceberg...

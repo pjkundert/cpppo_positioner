@@ -211,10 +211,13 @@ def main( argv=None, idle_service=None, **kwds ):
 
     logging.basicConfig( **cpppo.log_cfg )
 
-    signal.signal( signal.SIGUSR1, loglevelup_request )
-    signal.signal( signal.SIGUSR2, logleveldn_request )
     signal.signal( signal.SIGTERM, shutdown_request )
-    signal.signal( signal.SIGURG,  uptime_request )
+    if hasattr( signal, 'SIGUSR1' ):
+        signal.signal( signal.SIGUSR1, loglevelup_request )
+    if hasattr( signal, 'SIGUSR2' ):
+        signal.signal( signal.SIGUSR2, logleveldn_request )
+    if hasattr( signal, 'SIGURG' ):
+        signal.signal( signal.SIGURG,  uptime_request )
 
     idle_service.append( signal_service )
 
