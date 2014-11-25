@@ -19,47 +19,61 @@
    : >>> import cpppo_positioner
    : >>>
 
-** Command- or Pipe-line usage
+** Positioning
 
-   An executable module entry point (=python -m cpppo_positioner=), and a
-   convenience executable script (=cpppo_positioner=) are supplied.
+   A Python API is provided to implement positioning control.
+   : from import cpppo_positioner import smc_lec_gen1
+   : gateway		= smc_lec_gen1()
+   : gatway.position( actuator=0, timeout=10.0, position=12345, speed=100, ... )
+
+*** Command- or Pipe-line usage
+
+    An executable module entry point (=python -m cpppo_positioner=), and a
+    convenience executable script (=cpppo_positioner=) are supplied.
+    
+    If your application generates a stream of actuator position data, or if you
+    have some manual positions you wish to move to, you can use the command-line
+    interface.  You may supply one or more actuator positions in blobs of JSON
+    data (an actual position would have more entries, such as =acceleration=,
+    =deceleration=, =timeout=, ...):
+    : $ position='{ "actuator": 0, "position": 12345, "speed": 100 }'
    
-   If your application generates a stream of actuator position data, or if you
-   have some manual positions you wish to move to, you can use the command-line
-   interface.  You may supply one or more actuator positions in blobs of JSON
-   data (an actual position would have more entries, such as =acceleration=,
-   =deceleration=, =timeout=, ...):
-   : $ position='{ "actuator": 0, "position": 12345, "speed": 100 }'
+    These positions may be supplied either as single parameters on the command
+    line, or as separate lines of input (if standard input is selected, by
+    supplying a '-' option):
+    : $ python -m cpppo_positioner --address gateway -v "$position"
+    : $ echo "$position" | cpppo_positioner --address gateway -v -
 
-   These positions may be supplied either as single parameters on the command
-   line, or as separate lines of input (if standard input is selected, by
-   supplying a '-' option):
-   : $ python -m cpppo_positioner --address gateway -v "$position"
-   : $ echo "$position" | cpppo_positioner --address gateway -v -
+**** Quoting double-quotes on Windows Powershell
 
-*** Quoting double-quotes on Windows Powershell
+     Note that on Windows Cmd or Powershell, it is very difficult to quote
+     double-quote characters in strings.  In Powershell, you need to use the
+     bash-slash + back-tick before each double-quote.  Unexpectedly,
+     using a single-quoted string does *not* allow you to contain double-quotes.
+     
+     You can get double quotes into a string:
+     : PS > $position = '{ "actuator": 0, "position": 12345, "speed": 100 }'
+     : PS > $position
+     : '{ "actuator": 0, "position": 12345, "speed": 100 }'
+     : PS >
+     
+     However, when you try to use them, they are re-interpreted on inclusion in a
+     command:
+     : PS > python -m cpppo_positioner --address gateway -v "$position"
+     : PS > python -m cpppo_positioner -v "$position"
+     : ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
+     :     Expecting property name: line 1 column 3 (char 2)
+     
+     So, the only way to do this is to use the strange back-slash + back-tick
+     double-escape, directly as a command-line argument:
+     : PS > python -m cpppo_positioner --address gateway -v '{ \`"actuator\`": 0, ... }'
+     
+     Recommendation: use Linux or Mac, or install Cygwin and use bash on
+     Windows.  Trust me; this is just the tip of the iceberg...
 
-    Note that on Windows Cmd or Powershell, it is very difficult to quote
-    double-quote characters in strings.  In Powershell, you need to use the
-    =\`"= (bash-slash + back-tick) before each double-quote.  Unexpectedly,
-    using a single-quoted string does *not* allow you to contain double-quotes.
+** SMC Gateway Simulator
+   
+   To simulate a number of SMC positioning actuators behind an SMC LEC-GEN1
+   gateway, run:
 
-    You can get double quotes into a string:
-    : PS > $position = '{ "actuator": 0, "position": 12345, "speed": 100 }'
-    : PS > $position
-    : '{ "actuator": 0, "position": 12345, "speed": 100 }'
-    : PS >
-
-    However, when you try to use them, they are re-interpreted on inclusion in a
-    command:
-    : PS > python -m cpppo_positioner --address gateway -v "$position"
-    : PS > python -m cpppo_positioner -v "$position"
-    : ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
-    :     Expecting property name: line 1 column 3 (char 2)
-
-    So, the only way to do this is to use the strange back-slash + back-tick
-    double-escape, directly as a command-line argument:
-    : PS > python -m cpppo_positioner --address gateway -v '{ \`"actuator\`": 0, ... }'
-
-    Recommendation: use Linux or Mac, or install Cygwin and use bash on
-    Windows.  Trust me; this is just the tip of the iceberg...
+   : $ python -m cpppo_positioner.simulator 3
