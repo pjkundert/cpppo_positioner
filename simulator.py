@@ -42,8 +42,22 @@ import time
 
 import cpppo
 from cpppo import history
-from cpppo.server.enip import (device, parser, logix)
+from cpppo.server.enip import (device, parser, logix, client)
 from cpppo.server.enip.main import main
+
+
+# Globals (parsed from argument list) accessed by classes
+gateway_actuator_count		= 3
+
+# TODO: We don't know at this point what Class ID and Instance ID the SMC Gateway's IN and OUT
+# Attributes need to be at...  Find out.
+gateway_class_id		= 0x1FF # random
+gateway_instance_id		= 1
+gateway_attribute_id		= {}
+gateway_attribute_id['IN']	= 1
+gateway_attribute_id['OUT']	= 2
+gateway_attribute_size		= 256
+gateway				= None
 
 
 class simulation( threading.Thread ):
@@ -262,8 +276,6 @@ class smc_gateway( simulation ):
     simulators.
 
     """
-    assert len( sys.argv ) > 1, "simulator requires at least actuator count"
-    actuator_count		= int( sys.argv.pop( 1 ))
     lock			= threading.Lock()
 
     IN				= simulation.UNUSED + 0
@@ -274,12 +286,13 @@ class smc_gateway( simulation ):
         self._in		= [0] * 255
         self._out		= [0] * 255
         self.actuators		= []
-        while len( self.actuators ) < self.actuator_count:
+
+        logging.warning( "Simulating %d SMC Positioning Actuators", actuator_count )
+        while len( self.actuators ) < gateway_actuator_count:
             a                       = smc_actuator()
             a.daemon                = True
             a.start()
             self.actuators.append( a )
-
         super( smc_gateway, self ).__init__( **kwds )
 
     def join( self, timeout=None ):
@@ -299,20 +312,8 @@ class smc_gateway( simulation ):
         """
         return super( smc_gateway, self ).advance()
 
-# TODO: We don't know at this point what Class ID and Instance ID the SMC Gateway's IN and OUT
-# Attributes need to be at...  Find out.
-gateway_class_id		= 0x1FF # random
-gateway_instance_id		= 1
-gateway_attribute_id		= {}
-gateway_attribute_id['IN']	= 1
-gateway_attribute_id['OUT']	= 2
-gateway				= None
-
-class SMC_Gateway_Object( logix.Logix ):
-    """An object that responds to Logix (Read/Write Tag [Fragmented]) requests."""
-    class_id			= gateway_class_id
-
-SMC_Gateway_Object( name="SMC Gateway", instance_id=gateway_instance_id )
+    def update( self, attribute ):
+        """An Attribute was updated via  """
 
 
 # 
@@ -332,13 +333,12 @@ class Attribute_positioner( device.Attribute ):
                 gateway.daemon	= True
                 gateway.start()
 
-
         assert self.name in ('IN','OUT') \
             and len( self ) == 256 \
             and isinstance( self.parser, parser.SINT ), \
             "Invalid tag names; only 'IN=SINT[256]' and 'OUT=SINT[256]' accepted"
 
-        # Put ourself into the SMC Gateway Object as an Attribute
+        # Put ourself into the SMC Gateway Object at a specific Class, Instance and Atribute ID.
         assert not device.resolve_tag( self.name ), "The %s tag already exists" % self.name
         instance		= device.lookup( gateway_class_id, gateway_instance_id )
         assert instance, "SMC Gateway Object Instance not found"
@@ -374,6 +374,7 @@ class Attribute_positioner( device.Attribute ):
             logging.info( "PLC I/O Write Tag %20s[%5s-%-5s]: %s", self.name,
                           key.indices( len( self ))[0]   if isinstance( key, slice ) else key,
                           key.indices( len( self ))[1]-1 if isinstance( key, slice ) else key )
+            
         except Exception as exc:
             logging.warning( "PLC I/O Write Tag %20s[%5s-%-5s] Exception: %s", self.name,
                              key.indices( len( self ))[0]   if isinstance( key, slice ) else key,
@@ -382,4 +383,48 @@ class Attribute_positioner( device.Attribute ):
             raise
 
 if __name__ == "__main__": 
+
+    # Some initial setup before the main loop; no logging set up yet...
+
+    # Find the SMC Simulator related arguments, and pull them out of the sys.argv list
+    if  len( sys.argv ) > 1 and sys.argv[1].isdigit():
+        actuator_count		= int( sys.argv.pop( 1 ))
+    elif '--actuators' in sys.argv:
+        i				= sys.argv.index( '--actuators' )
+        sys.argv.pop( i )
+        actuator_count		= int( sys.argv.pop( i ))
+
+    # Check for the IN= and OUT= attributes, and pull off any trailing @... designating the Class,
+    # Instance and Attribute IDs of these Attributes.
+    for att in gateway_attribute_id:
+        tag			= None
+        for arg in range( 1, len( sys.argv )):
+            if sys.argv[arg].startswith( att + '=' ):
+                tag		= sys.argv[arg]
+                if '@' not in tag:
+                    continue
+                tag,ids		= tag.split( '@', 1 )
+                sys.argv[arg]	= tag
+                path		= client.parse_path( '@'+ids )
+                assert len( path ) == 3 \
+                    and 'class' in path[0] and 'instance' in path[1] and 'attribute' in path[2], \
+                    "Tag %r CIP path %r must specify Class, Instance and Attribute ID" % (
+                        tag, '@'+ids )
+                if gateway_class_id != path[0]['class']:
+                    gateway_class_id = path[0]['class']
+                if gateway_instance_id != path[1]['instance']:
+                    gateway_instance_id = path[1]['instance']
+                if gateway_attribute_id[att] != path[2]['attribute']:
+                    gateway_attribute_id[att] = path[2]['attribute']
+        if tag is None:
+            # The IN/OUT Attribute not specified; simulate it at the default size
+            sys.argv.append( "%s=SINT[%d]" % ( att, gateway_attribute_size ))
+
+    # Now that we have the SMC Gateway's CIP Class, Instance and Attribute IDs, create it
+    class SMC_Gateway_Object( logix.Logix ):
+        """An object that responds to Logix (Read/Write Tag [Fragmented]) requests."""
+        class_id			= gateway_class_id
+
+    SMC_Gateway_Object( name="SMC Gateway", instance_id=gateway_instance_id )
+
     sys.exit( main( attribute_class=Attribute_positioner ))

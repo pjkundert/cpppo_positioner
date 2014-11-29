@@ -166,6 +166,8 @@ def main( argv=None, idle_service=None, **kwds ):
 
     ap.add_argument( '-g', '--gateway', default='smc.smc_lec_gen1',
                      help="Gateway module.class for positioning actuator (default: smc.smc_lec_gen1)" )
+    ap.add_argument( '-c', '--config', default=None,
+                     help="Gateway module.class configuration JSON (default: None)" )
     ap.add_argument( '-v', '--verbose', default=0, action="count",
                      help="Display logging information." )
     ap.add_argument( '-a', '--address', default=( "%s:%d" % address ),
@@ -179,15 +181,6 @@ def main( argv=None, idle_service=None, **kwds ):
                      help="Any JSON position dictionaries, or numeric delays (in seconds)")
 
     args			= ap.parse_args( argv )
-
-    # Load the specified Gateway module.class, and ensure class is present; include the module's own
-    # directory to get the locally specified ones.
-    sys.path.append( os.path.dirname( __file__ ))
-    mod,cls			= args.gateway.split('.')
-    __import__( mod, globals(), locals(), [], 0 )
-    gateway_module		= sys.modules[mod]
-    assert hasattr( gateway_module, cls ), "Gateway module %s missing target class: %s" % ( mod, cls )
-    gateway_class		= getattr( gateway_module, cls )
 
     # Deduce interface:port address to connect, and correct types (default is address, above)
     conn			= args.address.split(':')
@@ -220,6 +213,26 @@ def main( argv=None, idle_service=None, **kwds ):
         signal.signal( signal.SIGURG,  uptime_request )
 
     idle_service.append( signal_service )
+
+    # Load the specified Gateway module.class, and ensure class is present; include the module's own
+    # directory to get the locally specified ones.
+    sys.path.append( os.path.dirname( __file__ ))
+    mod,cls			= args.gateway.split('.')
+    __import__( mod, globals(), locals(), [], 0 )
+    gateway_module		= sys.modules[mod]
+    assert hasattr( gateway_module, cls ), "Gateway module %s missing target class: %s" % ( mod, cls )
+    gateway_class		= getattr( gateway_module, cls )
+
+    # Parse any Gateway configuration JSON supplied
+    gateway_config		= {}
+    if args.config:
+        try:
+            gateway_config	= json.loads( args.config )
+            assert isinstance( gateway_config, dict ), \
+                "Gateway configuration JSON must produce a dictionary"
+        except Exception as exc:
+            logging.warning( "Invalid Gateway config: %s; %s", args.config, exc )
+            raise
 
     # Read and process JSON position and delay inputs; '-' means read from sys.stdin 'til EOF.  Can be mixed, eg:
     # 
@@ -273,11 +286,13 @@ def main( argv=None, idle_service=None, **kwds ):
                 if not gateway:
                     if gateway is None:
                         logging.detail( "Gateway:  %s:%d...", conn[0], conn[1] )
-                    gateway	= gateway_class( host=conn[0], port=conn[1], timeout=args.timeout )
+                    gateway	= gateway_class( config=gateway_config,
+                                                 host=conn[0], port=conn[1], timeout=args.timeout )
                     logging.normal( "Gateway:  %s:%d connected", conn[0], conn[1] )
             except Exception as exc:
                 ( logging.warning if gateway is None else logging.detail )(
-                    "Gateway:  %s:%d connection failed: %s\n%s", conn[0], conn[1], exc, traceback.format_exc() )
+                    "Gateway:  %s:%d connection failed: %s\n%s", conn[0], conn[1], exc,
+                    traceback.format_exc() )
                 gateway		= False
                 time.sleep( .1 ) # avoid tight loop on connection failures
 

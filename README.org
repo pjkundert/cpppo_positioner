@@ -74,16 +74,49 @@
 ** SMC Gateway Simulator
 
    A basic simulator of some of the I/O behaviour of the SMC Gateway is
-   implemented for testing purposes.  To simulate a number of SMC positioning
-   actuators behind an SMC LEC-GEN1 gateway, run (ensure that either you have
-   installed the cpppo_positioner, *or* are in the directory containing the
-   cloned cpppo_positioner repository):
-   : $ python -m cpppo_positioner.simulator 3 IN=SINT[256] OUT=SINT[256]
+   implemented for testing purposes.
+
+   Ensure that either you have installed the cpppo_positioner, *or* are in the
+   directory containing the cloned cpppo_positioner repository): To simulate a
+   number of SMC positioning actuators behind an SMC LEC-GEN1 gateway, run:
+   : $ python -m cpppo_positioner.simulator -v \
+   :     --actuators 3 IN=SINT[256]@0x1FF/1/1 OUT=SINT[256]@0x1FF/1/2
+   : ...
+   : ... NORMAL   main       Creating tag: IN=SINT [256]
+   : ... WARNING  __init__   Simulating 3 SMC Positioning Actuators
+   : ... NORMAL   __init__   SMC Gateway Tag IN : Class   511/0x01ff, Instance   1, Attribute     1
+   : ... NORMAL   main       Creating tag: OUT=SINT [256]
+   : ... NORMAL   __init__   SMC Gateway Tag OUT: Class   511/0x01ff, Instance   1, Attribute     2
+   : ... NORMAL   main       EtherNet/IP Simulator: ('', 44818)
+   : ...
+
+   Note: the second command-line continuation line above starting =--actuators=
+   contains all the defaults, and can be skipped unless you wish to change some
+   of them.  These optional arguments are:
+   : --actuators # -- how many actuators you wish to simulate; default: 3
+   : IN=...@C/I/A  -- IDs for Class C (eg. 0x1FF, 511), Instance I and Attr A
+   : 
+   This starts up the simulator, specifying that the simulated Gateway is at CIP
+   Class ID 0x1FF (511), and the IN and OUT Attributes are at Instance ID 1,
+   Attribute IDs 1 and 2, respectively.  It will bind to port 44818 on all
+   interfaces (including 'localhost').
 
    Once the simulator is running, test that the communication works, by issuing
    a basic positioning command:
-   : $ python -m cpppo_positioner -va localhost '{"actuator": 0, "position": 12345 }'
+   : $ python -m cpppo_positioner -va localhost \
+   :     --config '{ "in": "@0x1FF/1/1", "out": "@0x1FF/1/2" }' \
+   :     '{ "actuator": 0, "position": 12345 }'
    : ... NORMAL   main       Position: {u'actuator': 0, u'position': 12345}
    : ... NORMAL   main       Gateway: localhost:44818 connected
    : ... NORMAL   main       Completed 1/1 actuator positions in   0.021s
    : $
+
+   Note: The second command-line continuation line above starting =--config=
+   shows how to pass configurations to the actuator class.  It contains
+   defaults, and can be skipped unless you want to change some of them.
+   Presently, the smc.smc_lec_gen allows the following configurations:
+   : in       -- The @C/I/D Class, Instance and Attribute of the IN array
+   : out      -- The @C/I/D Class, Instance and Attribute of the OUT array
+   : depth    -- Pipelining depth to use for EtherNet/IP CIP I/O (default: 1)
+   : multiple -- Use CIP Multiple Packet Service for requests (default: False)
+   : timeout  -- Timeout in seconds for all EtherNet/IP CIP I/O (default: 1.0)
