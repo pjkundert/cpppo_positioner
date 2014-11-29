@@ -72,8 +72,18 @@
      Windows.  Trust me; this is just the tip of the iceberg...
 
 ** SMC Gateway Simulator
-   
-   To simulate a number of SMC positioning actuators behind an SMC LEC-GEN1
-   gateway, run:
 
-   : $ python -m cpppo_positioner.simulator 3
+   A basic simulator of some of the I/O behaviour of the SMC Gateway is
+   implemented for testing purposes.  To simulate a number of SMC positioning
+   actuators behind an SMC LEC-GEN1 gateway, run (ensure that either you have
+   installed the cpppo_positioner, *or* are in the directory containing the
+   cloned cpppo_positioner repository):
+   : $ python -m cpppo_positioner.simulator 3 IN=SINT[256] OUT=SINT[256]
+
+   Once the simulator is running, test that the communication works, by issuing
+   a basic positioning command:
+   : $ python -m cpppo_positioner -va localhost '{"actuator": 0, "position": 12345 }'
+   : ... NORMAL   main       Position: {u'actuator': 0, u'position': 12345}
+   : ... NORMAL   main       Gateway: localhost:44818 connected
+   : ... NORMAL   main       Completed 1/1 actuator positions in   0.021s
+   : $

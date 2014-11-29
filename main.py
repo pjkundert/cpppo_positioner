@@ -227,8 +227,8 @@ def main( argv=None, idle_service=None, **kwds ):
 
     if '-' in args.position:
         # Collect input from sys.stdin 'til EOF, at position of '-' in argument list
-        stdin_pos		= args.position.index('-')
-        positer			= itertools.chain( args.position[:stdin_pos], sys.stdin, args.position[stdin_pos+1:] )
+        minus			= args.position.index('-')
+        positer			= itertools.chain( args.position[:minus], sys.stdin, args.position[minus+1:] )
     else:
         positer			= iter( args.position )
 
@@ -273,7 +273,7 @@ def main( argv=None, idle_service=None, **kwds ):
                 if not gateway:
                     if gateway is None:
                         logging.detail( "Gateway:  %s:%d...", conn[0], conn[1] )
-                    gateway	= gateway_class( host=conn[0], port=conn[1], io_timeout=args.timeout )
+                    gateway	= gateway_class( host=conn[0], port=conn[1], timeout=args.timeout )
                     logging.normal( "Gateway:  %s:%d connected", conn[0], conn[1] )
             except Exception as exc:
                 ( logging.warning if gateway is None else logging.detail )(

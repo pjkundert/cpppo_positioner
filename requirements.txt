@@ -1,1 +1,1 @@
-cpppo
+cpppo>=3.0.0
