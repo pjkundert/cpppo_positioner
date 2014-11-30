@@ -294,7 +294,7 @@ def main( argv=None, idle_service=None, **kwds ):
                     "Gateway:  %s:%d connection failed: %s\n%s", conn[0], conn[1], exc,
                     traceback.format_exc() )
                 gateway		= False
-                time.sleep( .1 ) # avoid tight loop on connection failures
+                time.sleep( 1 ) # avoid tight loop on connection failures
 
         # Have a gateway; issue the positioning command
         try:

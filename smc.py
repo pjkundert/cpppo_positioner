@@ -58,12 +58,13 @@ class smc_lec_gen1( client.connector ):
         except Exception as exc:
             logging.warning( "Failed to read IN: %s, OUT: %s Attributes; %s ",
                              client.format_path( self.path_in ), client.format_path( self.path_out ), exc )
-        assert self.IN and len( self.IN ) == 256, \
+
+        logging.normal( " IN[%3s]: %r", len( self.IN  ) if hasattr( self.IN,  '__len__' ) else '?', self.IN )
+        assert self.IN  and hasattr( self.IN,  '__len__' ) and len( self.IN  ) == 256, \
             "Failed to retrieve  IN: %s Attribute: %s" % ( client.format_path( self.path_in ), self.IN )
-        assert self.OUT and len( self.OUT ) == 256, \
+        logging.normal( "OUT[%3s]: %r", len( self.OUT ) if hasattr( self.OUT, '__len__' ) else '?', self.OUT )
+        assert self.OUT and hasattr( self.OUT, '__len__' ) and len( self.OUT ) == 256, \
             "Failed to retrieve OUT: %s Attribute: %s" % ( client.format_path( self.path_out ), self.OUT )
-        logging.normal( " IN: %s", self.IN )
-        logging.normal( "OUT: %s", self.OUT )
 
     def complete( self, actuator=0, timeout=None ):
         """Ensure that any prior operation on the actuator is complete."""

@@ -40,6 +40,11 @@ import sys
 import threading
 import time
 
+try:
+    import reprlib
+except:
+    import repr as reprlib
+
 import cpppo
 from cpppo import history
 from cpppo.server.enip import (device, parser, logix, client)
@@ -283,8 +288,8 @@ class smc_gateway( simulation ):
     UNUSED			= simulation.UNUSED + 2
 
     def __init__( self, **kwds ):
-        self._in		= [0] * 255
-        self._out		= [0] * 255
+        self._in		= [0] * 256
+        self._out		= [0] * 256
         self.actuators		= []
 
         logging.warning( "Simulating %d SMC Positioning Actuators", actuator_count )
@@ -312,19 +317,86 @@ class smc_gateway( simulation ):
         """
         return super( smc_gateway, self ).advance()
 
-    def update( self, attribute ):
-        """An Attribute was updated via  """
+    def _key_range( self, key ):
+        if isinstance( key, slice ):
+            beg,end,str		= key.indices( gateway_attribute_size )
+            assert str == 1, "Unsupported slice stride: %d" % ( str )
+        else:
+            assert isinstance( key, int ), "Attempt to index with a non-int: %r" % key
+            beg,end		= key,key+1
+        return beg, end
 
+    @cpppo.mutexmethod( 'lock' )
+    def I_O__getitem__( self, key, which, data ):
+        """Handle reading of either IN or OUT array; just return the current raw data. """
+        beg,end			= self._key_range( key )
+        if isinstance( key, slice ):
+            val			= data[beg:end]
+            logging.normal( "%3s[%3d-%-3d]  == %r", which, beg, end-1, reprlib.repr( val ))
+            assert len( val ) == end - beg, "Incorrect result length: %d/%d" % ( len( val ), end - beg )
+        else:
+            val			= data[beg]
+            logging.normal( "%3s[  %3d  ]  == %r", which, beg, reprlib.repr( val ))
+            assert end-beg == 1, "Non-slice indexing resulted in multiple (%d) values" % ( end-beg )
+        return val
+
+    def IN__len__( self ):
+        return gateway_attribute_size
+    def IN__repr__( self ):
+        return self.__class__.__name__ + ' IN  Attribute'
+    def IN__getitem__( self, key ):
+        return self.I_O__getitem__( key, 'IN', self._in )
+    def IN__setitem__( self, key, val ):
+        raise Exception( "Rejected attempt to write to the IN array; read-only" )
+
+    def OUT__len__( self ):
+        return gateway_attribute_size
+    def OUT__repr__( self ):
+        return self.__class__.__name__ + ' OUT Attribute'
+    def OUT__getitem__( self, key ):
+        return self.I_O__getitem__( key, 'OUT', self._out )
+    @cpppo.mutexmethod( 'lock' )
+    def OUT__setitem__( self, key, val ):
+        assert isinstance( key, slice )
+        beg,end			= self._key_range( key )
+
+        logging.normal( "OUT[%3d-%-3d]  <= %r", beg, end-1, reprlib.repr( val ))
+        # Writing to one of the 12 actuators?  Actuators numbered 1-12
+        act			= beg // 20 + 1
+        if 1 <= act <= 12:
+            # Validate OUT Actuator writes
+            assert (end-1) // 20 + 1 == act, \
+                "Attempt to write outside Actuator %2d's space %d-%d" % (
+                    act, (act-1)*20, (act-1)*20+19 )
+        else:
+            # Validate OUT Gateway unit control flags
+            assert 250 <= beg <= 253 and 250 <= (end-1) <= 253, \
+                "Attempt to write outside Gateway flag space 250-253"
+            pass
+        self._out[key]		= val
+        
+    def interface( self, which ):
+        """Return a class that implements the interface required by a cpppo.server.enip.device Attribute,
+        which vectors any I/O requests along to this instance.  Accepts the 'IN' or 'OUT'
+        designator, and constructs a custom class instance with bound method targetting the
+        appropriate local instance methods.
+
+        """
+        class forward( object ):
+            __len__		= getattr( self, which + '__len__'  )
+            __repr__		= getattr( self, which + '__repr__' )
+            __getitem__		= getattr( self, which + '__getitem__' )
+            __setitem__		= getattr( self, which + '__setitem__' )
+        return forward()
 
 # 
 # Attribute_positioner -- intercept all EtherNet/IP Attribute I/O, and simulator actuators
 # 
 class Attribute_positioner( device.Attribute ):
     """
-    Recognizes the tags IN and OUT only
+    Recognizes the tags IN (reading) and OUT (writing) only.  Supplies a 'default' of the 
     """
     def __init__( self, *args, **kwds ):
-        super( Attribute_positioner, self ).__init__( *args, **kwds )
 
         with smc_gateway.lock:
             global gateway
@@ -333,10 +405,21 @@ class Attribute_positioner( device.Attribute ):
                 gateway.daemon	= True
                 gateway.start()
 
-        assert self.name in ('IN','OUT') \
-            and len( self ) == 256 \
-            and isinstance( self.parser, parser.SINT ), \
+        # We haven't set up the Attribute yet (no self.name...); pick off the supplied name from the
+        # first positional arg, from from the kwds['name']...
+        name			= args[0] if args else kwds['name']
+        assert name in ('IN','OUT'), \
             "Invalid tag names; only 'IN=SINT[256]' and 'OUT=SINT[256]' accepted"
+
+        gateway_interface	= gateway.interface( name )
+        logging.normal( "Connecting %3s Attribute I/O to SMC Gateway %s", name, gateway_interface )
+        kwds['default']		= gateway_interface
+
+        super( Attribute_positioner, self ).__init__( *args, **kwds )
+
+        assert len( self ) == gateway_attribute_size \
+            and isinstance( self.parser, parser.SINT ), \
+            "Invalid tag size/type; only 'IN=SINT[256]' and 'OUT=SINT[256]' accepted"
 
         # Put ourself into the SMC Gateway Object at a specific Class, Instance and Atribute ID.
         assert not device.resolve_tag( self.name ), "The %s tag already exists" % self.name
