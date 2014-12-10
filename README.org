@@ -120,3 +120,4 @@
    : depth    -- Pipelining depth to use for EtherNet/IP CIP I/O (default: 1)
    : multiple -- Use CIP Multiple Packet Service for requests (default: False)
    : timeout  -- Timeout in seconds for all EtherNet/IP CIP I/O (default: 1.0)
+   : latency  -- How long to wait between refreshing IN/OUT data (default: 0.1)

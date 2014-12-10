@@ -174,7 +174,7 @@ def main( argv=None, idle_service=None, **kwds ):
                      help="EtherNet/IP interface[:port] of actuator gateway to connect to (default: %s:%d)" % address )
     ap.add_argument( '-l', '--log',
                      help="Log file, if desired" )
-    ap.add_argument( '-t', '--timeout', default=1,
+    ap.add_argument( '-t', '--timeout', default=5,
                      help="Gateway I/O timeout" )
 
     ap.add_argument( 'position', nargs="+",
@@ -278,32 +278,32 @@ def main( argv=None, idle_service=None, **kwds ):
             continue
 
         # A position dict in 'dat'; attempt to position to it.  We'll wait forever to establish a
-        # connection to the gateway, but attempt each positioning command only once.
+        # connection to the gateway, and then attempt each positioning command until it succeeds.
         logging.normal( "Position: %r", dat )
         count		       += 1
-        while not gateway:
-            try:
-                if not gateway:
-                    if gateway is None:
-                        logging.detail( "Gateway:  %s:%d...", conn[0], conn[1] )
-                    gateway	= gateway_class( config=gateway_config,
+        while success < count:
+            if not gateway:
+                try:
+                    gateway	= gateway_class( config=gateway_config.copy(),
                                                  host=conn[0], port=conn[1], timeout=args.timeout )
                     logging.normal( "Gateway:  %s:%d connected", conn[0], conn[1] )
-            except Exception as exc:
-                ( logging.warning if gateway is None else logging.detail )(
-                    "Gateway:  %s:%d connection failed: %s\n%s", conn[0], conn[1], exc,
-                    traceback.format_exc() )
-                gateway		= False
-                time.sleep( 1 ) # avoid tight loop on connection failures
+                except Exception as exc:
+                    logging.warning("Gateway:  %s:%d connection failed: %s; %s", conn[0], conn[1],
+                                    exc, traceback.format_exc() if gateway is None else "" )
+                    gateway	= False
+                    time.sleep( 1 ) # avoid tight loop on connection failures
+                    continue
 
-        # Have a gateway; issue the positioning command
-        try:
-            gateway.position( **dat )
-            success	       += 1
-        except Exception as exc:
-            logging.warning( "Position: %r failure; closing gateway: %s\n%s", exc, traceback.format_exc() )
-            gateway.close()
-            gateway		= None
+            # Have a gateway; issue the positioning command, discarding the Gateway on failure and
+            # looping; otherwise, fall thru after success (gateway is Truthy) and get next command
+            try:
+                gateway.position( **dat )
+                success	       += 1
+                logging.normal( "Position: %r success", dat )
+            except Exception as exc:
+                logging.warning( "Position: %r failure; closing gateway: %s\n%s", dat, exc, traceback.format_exc() )
+                gateway.close()
+                gateway		= None
         
     logging.normal( "Completed %d/%d actuator positions in %7.3fs", success, count, cpppo.timer() - start )
     return 0 if success == count else 1

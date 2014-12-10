@@ -1,0 +1,164 @@
+$ EZ-EDS Version 3.3 Generated Electronic Data Sheet
+
+[File]
+        DescText = "SMC Gateway Unit EtherNet/IP";
+        CreateDate = 02-09-2011;
+        CreateTime = 11:35:44;
+        ModDate = 02-15-2011;
+        ModTime = 15:18:12;
+        Revision = 1.1;
+        HomeURL = "http://www.smcworld.com/";
+
+
+[Device]
+        VendCode = 7;
+        VendName = "SMC Corporation";
+        ProdType = 0;
+        ProdTypeStr = "Generic Device";
+        ProdCode = 154;
+        MajRev = 1;
+        MinRev = 1;
+        ProdName = "Gateway Unit EtherNet/IP";
+        Catalog = "Gateway Unit EtherNet/IP";
+
+
+[Device Classification]
+        Class1 = EtherNetIP;
+
+
+[Params]
+
+
+[Assembly]
+        Revision = 2;
+
+        Assem100 =
+                "Input Data",
+                ,
+                256,
+                0x0000,
+                ,,
+                2048,;
+
+        Assem150 =
+                "Output Data",
+                ,
+                256,
+                0x0000,
+                ,,
+                2048,;
+
+
+[Connection Manager]
+        Connection1 =
+                0x04010002,             $ trigger & transport
+                                        $  0-15  = supported transport classes (class 1)
+                                        $  16 = cyclic (1 = supported)
+                                        $  17 = change of state (0 = not supported)
+                                        $  18 = on demand (0 = not supported)
+                                        $  19-23 = reserved (must be zero)
+                                        $  24-27 = exclusive owner
+                                        $  28-30 = reserved (must be zero)
+                                        $  31 = client 0 / server = 1
+                0x44640405,             $ point/multicast & priority & realtime format
+                                        $   0     = O=>T fixed (1 = supported)
+                                        $   1     = O=>T variable (0 = not supported)
+                                        $   2     = T=>O fixed (1 = supported)
+                                        $   3     = T=>O variable (0 = not supported)
+                                        $  4-7   = reserved (must be zero)
+                                        $  8-10  = O=>T header (4 byte run/idle)
+                                        $  11  = reserved (must be zero)
+                                        $  12-14 = T=>O header
+                                        $  15  = reserved (must be zero)
+                                        $  16-19 = O=>T point-to-point
+                                        $  20-23 = T=>O connection type (multicast or point-to-point)
+                                        $  24-27 = O=>T scheduled
+                                        $  28-31 = T=>O scheduled
+                ,,Assem150,             $ O=>T RPI,Size,Format
+                ,,Assem100,             $ T=>O RPI,Size,Format
+                ,,                      $ config part 1 (dynamic assemblies)
+                ,,                      $ config part 2 (module configuration)
+                "Exclusive Owner",      $ connection name
+                "",                     $ Help string
+                "20 04 24 05 2C 96 2C 64";    $ exclusive output path
+
+
+        Connection2 =
+                0x02010002,             $ trigger & transport
+                                        $  0-15  = supported transport classes (class 1)
+                                        $  16 = cyclic (1 = supported)
+                                        $  17 = change of state (0 = not supported)
+                                        $  18 = on demand (0 = not supported)
+                                        $  19-23 = reserved (must be zero)
+                                        $  24-27 = exclusive owner
+                                        $  28-30 = reserved (must be zero)
+                                        $  31 = client 0 / server = 1
+                0x44640305,             $ point/multicast & priority & realtime format
+                                        $   0     = O=>T fixed (1 = supported)
+                                        $   1     = O=>T variable (0 = not supported)
+                                        $   2     = T=>O fixed (1 = supported)
+                                        $   3     = T=>O variable (0 = not supported)
+                                        $  4-7   = reserved (must be zero)
+                                        $  8-10  = O=>T header (4 byte run/idle)
+                                        $  11  = reserved (must be zero)
+                                        $  12-14 = T=>O header
+                                        $  15  = reserved (must be zero)
+                                        $  16-19 = O=>T point-to-point
+                                        $  20-23 = T=>O connection type (multicast or point-to-point)
+                                        $  24-27 = O=>T scheduled
+                                        $  28-31 = T=>O scheduled
+                ,0,,                    $ O=>T RPI,Size,Format
+                ,,Assem100,             $ T=>O RPI,Size,Format
+                ,,                      $ config part 1 (dynamic assemblies)
+                ,,                      $ config part 2 (module configuration)
+                "Input Only",           $ connection name
+                "",                     $ Help string
+                "20 04 24 05 2C 03 2C 64";    $ input only path
+
+
+        Connection3 =
+                0x01010002,             $ trigger & transport
+                                        $  0-15  = supported transport classes (class 1)
+                                        $  16 = cyclic (1 = supported)
+                                        $  17 = change of state (0 = not supported)
+                                        $  18 = on demand (0 = not supported)
+                                        $  19-23 = reserved (must be zero)
+                                        $  24-27 = exclusive owner
+                                        $  28-30 = reserved (must be zero)
+                                        $  31 = client 0 / server = 1
+                0x44240305,             $ point/multicast & priority & realtime format
+                                        $   0     = O=>T fixed (1 = supported)
+                                        $   1     = O=>T variable (0 = not supported)
+                                        $   2     = T=>O fixed (1 = supported)
+                                        $   3     = T=>O variable (0 = not supported)
+                                        $  4-7   = reserved (must be zero)
+                                        $  8-10  = O=>T header (4 byte run/idle)
+                                        $  11  = reserved (must be zero)
+                                        $  12-14 = T=>O header
+                                        $  15  = reserved (must be zero)
+                                        $  16-19 = O=>T point-to-point
+                                        $  20-23 = T=>O connection type (multicast)
+                                        $  24-27 = O=>T scheduled
+                                        $  28-31 = T=>O scheduled
+                ,0,,                    $ O=>T RPI,Size,Format
+                ,,Assem100,             $ T=>O RPI,Size,Format
+                ,,                      $ config part 1 (dynamic assemblies)
+                ,,                      $ config part 2 (module configuration)
+                "Listen Only",          $ connection name
+                "",                     $ Help string
+                "20 04 24 05 2C 04 2C 64";    $ listen only path
+
+[Port]
+        Port1 =
+                TCP,                    $ port type name
+                "TCP/IP",               $ name of port
+                "20 F5 24 01",          $ instance one of the TCP/IP interface object
+                2;                      $ port number
+
+
+[Capacity]
+        MaxCIPConnections = 20;         $ Max CIP cnx - all classes
+        TSpec1 = TxRx, 1, 1000;         $ Packets per sec @ 1 bytes
+        TSpec2 = TxRx, 256, 1000;       $ Packets per sec @ 256 bytes
+
+$ [EDS] SMC Gateway Unit EtherNet/IP

@@ -292,7 +292,7 @@ class smc_gateway( simulation ):
         self._out		= [0] * 256
         self.actuators		= []
 
-        logging.warning( "Simulating %d SMC Positioning Actuators", actuator_count )
+        logging.warning( "Simulating %d SMC Positioning Actuators", gateway_actuator_count )
         while len( self.actuators ) < gateway_actuator_count:
             a                       = smc_actuator()
             a.daemon                = True
@@ -361,6 +361,7 @@ class smc_gateway( simulation ):
         beg,end			= self._key_range( key )
 
         logging.normal( "OUT[%3d-%-3d]  <= %r", beg, end-1, reprlib.repr( val ))
+
         # Writing to one of the 12 actuators?  Actuators numbered 1-12
         act			= beg // 20 + 1
         if 1 <= act <= 12:
@@ -471,11 +472,11 @@ if __name__ == "__main__":
 
     # Find the SMC Simulator related arguments, and pull them out of the sys.argv list
     if  len( sys.argv ) > 1 and sys.argv[1].isdigit():
-        actuator_count		= int( sys.argv.pop( 1 ))
+        gateway_actuator_count	= int( sys.argv.pop( 1 ))
     elif '--actuators' in sys.argv:
-        i				= sys.argv.index( '--actuators' )
+        i			= sys.argv.index( '--actuators' )
         sys.argv.pop( i )
-        actuator_count		= int( sys.argv.pop( i ))
+        gateway_actuator_count	= int( sys.argv.pop( i ))
 
     # Check for the IN= and OUT= attributes, and pull off any trailing @... designating the Class,
     # Instance and Attribute IDs of these Attributes.
