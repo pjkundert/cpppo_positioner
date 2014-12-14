@@ -11,11 +11,11 @@ minimalmodbus.STOPBITS		= 1
 minimalmodbus.BYTESIZE		= 8
 minimalmodbus.PARITY		= serial.PARITY_NONE
 minimalmodbus.BAUDRATE		= 4800
-minimalmodbus.TIMEOUT		= 0.5
+minimalmodbus.TIMEOUT		= 1.5
 
 
 
-def test_serial_rs485():
+def test_rs485():
     """Use MinimalModbus to test RS485 read/write. """
     
     groups			= subprocess.check_output( ['groups'] )
@@ -27,3 +27,7 @@ def test_serial_rs485():
     comm.debug			= True
     val				= comm.read_register( 1 )
     assert val == 0
+    comm.write_register( 1, 99 )
+    val				= comm.read_register( 1 )
+    assert val == 99
+    comm.write_register( 1, 0 )
