@@ -49,16 +49,21 @@ EXAMPLE
     on interface 'localhost', which delays all responses for 2.5 seconds.
 
 '''
+import argparse
+import json
+import logging
 import os
-import sys
-import traceback
 import random
-import time
 import socket
 import struct
-import logging
-import repr
-import argparse
+import sys
+import time
+import traceback
+
+try:
+    import reprlib
+except ImportError:
+    import repr as reprlib
     
 
 #---------------------------------------------------------------------------# 
@@ -81,8 +86,12 @@ from pymodbus import constants
 
 log 			= logging.getLogger( 'modbus_sim' )
 
-def registers_context( registers ):
-    """
+def registers_context( registers, slaves=None ):
+    """Parse a series of register ranges (and optional values), create a data
+    store, and assign it to the given single (or sequence of) Slave IDs (if
+    None, then it reports to any ID.)  The same data store is used to back all
+    provided Slave IDs.
+
     --------------------------------------------------------------------------
     initialize your data store, returning an initialized ModbusServerConext
     --------------------------------------------------------------------------
@@ -144,31 +153,33 @@ def registers_context( registers ):
     
     Allow:
         <begin>[-<end>][=<val>[,<val>]] ...
+
     """
     def registers_parse( txt ):
-        """ Tokenizer yields integers; any other character, one at a time. """
+        """ Tokenizer yields integers; any other character (except space), one at a time. """
         b, i, e 			= 0, 0, len( txt )
         while i <= e:
             if i == e or not( '0' <= txt[i] <= '9' ):
                 if i > b:
                     yield int( txt[b:i] )  		# "123..."   Parsed 1+ digits
-                    b, i 		= i, i-1
+                    b, i 	= i, i-1
                 elif i < e:
-                    yield txt[b]           		# "?..."     Something else
-                    b, i 		= i+1, i
+                    if txt[b] != ' ':
+                        yield txt[b]           		# "?..."     Something else (not whitespace)
+                    b, i 	= i+1, i
             i 		       += 1                           
     
     # Parse register ranges
     # 0  10001 30001 40001
-    cod,   did,  ird,  hrd 		= {}, {}, {}, {}
+    cod,   did,  ird,  hrd 	= {}, {}, {}, {}
     for txt in registers:
         prs 			= registers_parse( txt )
         beg = end 			= None
         val 			= []
         try:
-            beg 			= prs.next()
-            end 			= beg
-            end 			= prs.next()
+            beg 		= prs.next()
+            end 		= beg
+            end 		= prs.next()
             if end == '-':
                 end 		= prs.next()		# <beg>-<end>=
                 equ 		= prs.next()
@@ -196,7 +207,7 @@ def registers_context( registers ):
             if len( val ) < end - beg + 1:
                 val 	       *= (( end - beg + 1 ) / len( val ) + 1 )
             val 			= val[:end - beg + 1]
-            log.info( "%05d-%05d = %s" % ( beg, end, repr.repr( val )))
+            log.info( "%05d-%05d = %s" % ( beg, end, reprlib.repr( val )))
             for reg in xrange( beg, end + 1 ):
                 dct, off 	= (     ( hrd, 40001 ) if reg >= 40001
                                    else ( ird, 30001 ) if reg >= 30001
@@ -206,16 +217,30 @@ def registers_context( registers ):
         except Exception as exc:
             log.error( "Unrecognized registers '%s': %s" % ( txt, str( exc )))
             raise
-        log.info( "Holding Registers: %s" % ( repr.repr( hrd )))
-        log.info( "Input   Registers: %s" % ( repr.repr( ird )))
-        log.info( "Output  Coils:     %s" % ( repr.repr( cod )))
-        log.info( "Discrete Inputs:   %s" % ( repr.repr( did )))
+        log.info( "Holding Registers: %s" % ( reprlib.repr( hrd )))
+        log.info( "Input   Registers: %s" % ( reprlib.repr( ird )))
+        log.info( "Output  Coils:     %s" % ( reprlib.repr( cod )))
+        log.info( "Discrete Inputs:   %s" % ( reprlib.repr( did )))
     store = ModbusSlaveContext(
         di = ModbusSparseDataBlock( did ) if did else None,
         co = ModbusSparseDataBlock( cod ) if cod else None,
         hr = ModbusSparseDataBlock( hrd ) if hrd else None,
         ir = ModbusSparseDataBlock( ird ) if ird else None )
-    return ModbusServerContext( slaves=store, single=True )
+
+    # If slaves is None, then just pass the store with single=True; it will be
+    # used for every slave.  Otherwise, map all the specified slave IDs to the
+    # same store and pass single=False.  This would be used for Serial Modbus
+    # protocols, and you should probably also specify ignore_missing_slaves=True
+    # so that the simulator acts like a multi-drop serial PLC arrangement.
+    try:
+        if slaves is None:
+            return ModbusServerContext( slaves=store, single=True )
+        else:
+            if not hasattr( slaves, '__iter__' ):
+                slaves		= [ slaves ] # Convert a single value to an iterable
+            return ModbusServerContext( slaves=dict( (uid,store) for uid in slaves ), single=False )
+    finally:
+        log.info( "Modbus Slave IDs:  %s", slaves or "(all)" )
 
 
 #---------------------------------------------------------------------------#
@@ -224,14 +249,16 @@ def registers_context( registers ):
 #   - passes any remaining keywords to underlying Modbus...Server (eg. 
 #     serial port parameters)
 #---------------------------------------------------------------------------#
-def StartTcpServerLogging( context=None, identity=None, framer=ModbusSocketFramer, address=None,
-                           **kwds ):
+def StartTcpServerLogging( registers, identity=None, framer=ModbusSocketFramer, address=None,
+                           slaves=None, **kwds ):
     ''' A factory to start and run a Modbus/TCP server
 
-    :param context: The ModbusServerContext datastore
+    :param registers: The register ranges (and optional values) to serve
     :param identity: An optional identify structure
     :param address: An optional (interface, port) to bind to.
+    :param slaves: An optional single (or list of) Slave IDs to serve
     '''
+    context			= registers_context( registers, slaves=slaves )
     server			= ModbusTcpServer( context, framer, identity, address,
                                                    **kwds )
     # Print the address successfully bound; this is useful, if attempts are made
@@ -242,19 +269,21 @@ def StartTcpServerLogging( context=None, identity=None, framer=ModbusSocketFrame
     server.serve_forever()
 
 
-def StartRtuServerLogging( context=None, identity=None, framer=ModbusRtuFramer, address=None, 
-                           **kwds ):
+def StartRtuServerLogging( registers, identity=None, framer=ModbusRtuFramer, address=None, 
+                           slaves=None, **kwds ):
     ''' A factory to start and run a Modbus/RTU server
 
-    :param context: The ModbusServerContext datastore
+    :param registers: The register ranges (and optional values) to serve
     :param identity: An optional identify structure
     :param address: An optional serial port device to bind to (passes 'address' as 'port').
+    :param slaves: An optional single (or list of) Slave IDs to serve
     '''
+    context			= registers_context( registers, slaves=slaves )
     server			= ModbusSerialServer( context, framer, identity, port=address,
                                                       **kwds )
     # Print the address successfully bound; this is useful, if attempts are made
     # to bind over a range of ports.
-    print( "Success; Started Modbus/RTU Simulator; PID = %d; port = %s" % (
+    print( "Success; Started Modbus/RTU Simulator; PID = %d; address = %s" % (
         os.getpid(), address ))
     sys.stdout.flush()
     server.serve_forever()
@@ -269,7 +298,7 @@ def main():
         
     The --evil option takes the following :
       truncate         -- return only part of the response
-      delay[:#.#]      -- delay response by #.# seconds (default == 5)
+      delay[:#.#[-#.#]]-- delay response by #.#[-#.#] seconds (default == 5)
       corrupt[:<shat>] -- corrupt Modbus/TCP protocol response (default == "transaction")
          :transaction    -- Transaction ID (only relevant to Modbus/TCP servers)
          :protocol       -- Protocol ID
@@ -285,8 +314,15 @@ def main():
     
       modbus-sim.py --address localhost:7502 --evil delay:2.5 40001-40100
     
-        Starts a simulated PLC serving Holding registers 40001-40100 == 0, on port 7502
-        on interface 'localhost', which delays all responses for 2.5 seconds.
+        Starts a simulated Modbus/TCP PLC serving Holding registers 40001-40100
+        == 0, on port 7502 on interface 'localhost', which delays all responses
+        for 2.5 seconds.
+
+      modbus-sim.py --address /dev/ttyS0 --evil delay:.01-.1 40001-40100
+    
+        Starts a simulated Modbus/RTU PLC serving Holding registers 40001-40100
+        == 0, on serial port /dev/ttyS0, which delays all responses for between
+        .01-.1 seconds.
 
     
     """ )
@@ -300,6 +336,8 @@ def main():
                          help="Number of ports to try, if busy       (default: 1)" )
     parser.add_argument( '-e', '--evil',	default=None,
                          help="Evil Modbus/TCP protocol framer       (default: None)" )
+    parser.add_argument( '-c', '--config',	default=None,
+                         help="""JSON config data for Modbus framer (eg. {"baudrate":19200}) (default: None)""" )
     parser.add_argument( 'registers', nargs="+" )
     args			= parser.parse_args()
     
@@ -314,9 +352,8 @@ def main():
     level			= ( levelmap[args.verbose] 
                                     if args.verbose in levelmap
                                     else logging.DEBUG )
-    
-    logging.basicConfig( level=level, filename=args.log,
-        format='%(asctime)s.%(msecs).03d %(threadName)10.10s %(name)-15.15s %(funcName)-15.15s %(levelname)-8.8s %(message)s' )
+    logging.basicConfig( level=level, filename=args.log, datefmt='%m-%d %H:%M:%S',
+        format='%(asctime)s.%(msecs).03d %(thread)16x %(name)-8.8s %(levelname)-8.8s %(funcName)-10.10s %(message)s' )
     
     #---------------------------------------------------------------------------# 
     # run the server you want
@@ -337,11 +374,14 @@ def main():
             logging.error( "Modbus/RTU not supported; ensure PySerial is available" )
             raise
         starter_kwds		= {
-            'stopbits': 1,
-            'bytesize':	8,
-            'parity':	serial.PARITY_NONE,
-            'baudrate':	4800,
-            'timeout':	0.5,
+            # Default serial configs; may be overridden, eg: --config '{"baudrate":19200}'
+            'stopbits':			1,
+            'bytesize':			8,
+            'parity':			serial.PARITY_NONE,
+            'baudrate':			4800,
+            'timeout':			0.5,
+            'slaves':			None,
+            'ignore_missing_slaves':	True,
         }
         framer			= ModbusRtuFramer
         address_sequence	= [ args.address ]
@@ -397,7 +437,10 @@ def main():
                 packet 		= super( self, EvilFramerDelayResponse ).buildPacket( message )
         
                 log.info( "Delaying response for %s seconds", self.delay )
-                time.sleep( self.delay )
+                delay		= self.delay
+                if isinstance( delay, (list,tuple) ):
+                    delay	= random.uniform( *delay )
+                time.sleep( delay )
         
                 return packet
 
@@ -405,10 +448,13 @@ def main():
         # If a "--evil delay:1.5" is provided, pull out the number and change
         # the ModbusSockerFramerDelayResponse class' .delay value to the specified
         # number of seconds
-        req			= args.evil.split(":", 1)
+        req			= args.evil.split( ':', 1 )
         assert 1 <= len( req ) <= 2
         if len( req ) == 2:
-            EvilFramerDelayResponse.delay = float( req[1] )
+            # Specified delay value or range
+            delay		= tuple( map( float, req[1].split( '-' )))
+            assert 1 <= len( delay ) <= 2
+            EvilFramerDelayResponse.delay = delay if len( delay ) > 1 else delay[0]
         log.info( "--evil '%s' uses EvilFramerDelayResponse, which delays responses for %s seconds",
                 args.evil, EvilFramerDelayResponse.delay )
 
@@ -494,18 +540,26 @@ def main():
         log.error("Unrecognized --evil argument: %s" % args.evil )
         return 1
 
+    if args.config:
+        try:
+            starter_kwds.update( **json.loads( args.config ))
+        except Exception as exc:
+            log.error( "Failed to parse JSON --config Modbus Framer config: %s; %s", args.config, exc )
+            raise
+
     #---------------------------------------------------------------------------#
     # Start the PLC simulation engine on a port in the range; will serve forever
     #---------------------------------------------------------------------------#
     for address in address_sequence:
         try:
-            starter( registers_context( args.registers ), framer=framer, address=address,
-                     **starter_kwds )
+            for k in sorted( starter_kwds.keys() ):
+                log.info( "config: %24s: %s", k, starter_kwds[k] )
+            starter( registers=args.registers, framer=framer, address=address, **starter_kwds )
         except KeyboardInterrupt:
             return 1
         except Exception as exc:
-            log.info( "Couldn't start PLC simulator on %s:%s: %s",
-                    address[0], address[1], traceback.format_exc() )
+            log.info( "Couldn't start PLC simulator on %s: %s",
+                    address, traceback.format_exc() )
     
     log.error( "Failed to start PLC simulator on %s, over a range of %s ports",
                args.address, args.range )

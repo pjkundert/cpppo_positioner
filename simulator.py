@@ -32,7 +32,7 @@ from __future__ import division
 __author__                      = "Perry Kundert"
 __email__                       = "perry@hardconsulting.com"
 __copyright__                   = "Copyright (c) 2014 Hard Consulting Corporation"
-__license__                     = "GPLv3 (or later)"
+__license__                     = "Dual License: GPLv3 (or later) and Commercial (see LICENSE)"
 
 import logging
 import struct
