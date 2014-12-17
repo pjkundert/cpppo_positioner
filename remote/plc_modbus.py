@@ -26,8 +26,9 @@ __license__                     = "Dual License: GPLv3 (or later) and Commercial
 """
 remote.plc_modbus -- Modbus PLC polling, reading and writing infrastructure
 """
-__all__				= ['ModbusClientTimeout', 'ModbusSerialClientTimeout',
-                                   'ModbusTcpClientTimeout', 'ModbusTcpServerActions', 'poller_modbus']
+__all__				= ['modbus_client_timeout',
+                                   'modbus_client_rtu', 'modbus_client_tcp',
+                                   'ModbusTcpServerActions', 'poller_modbus']
 
 import logging
 import select
@@ -38,7 +39,7 @@ import time
 import traceback
 
 import cpppo
-from   cpppo.remote.plc import (poller, PlcOffline)
+from   .plc import poller, PlcOffline
 
 # We need to monkeypatch ModbusTcpServer's SocketServer.serve_forever to be
 # Python3 socketserver compatible.  When pymodbus is ported to Python3, this
@@ -48,7 +49,7 @@ from pymodbus.server.sync import ModbusTcpServer
 from SocketServer import _eintr_retry
 
 from pymodbus.constants import Defaults
-from pymodbus.client.sync import ModbusTcpClient
+from pymodbus.client.sync import ModbusTcpClient, ModbusSerialClient
 from pymodbus.exceptions import *
 from pymodbus.bit_read_message import *
 from pymodbus.bit_write_message import *
@@ -99,7 +100,8 @@ class ModbusTcpServerActions( ModbusTcpServer ):
         """Override this to receive service every ~poll_interval s."""
         pass
 
-class ModbusClientTimeout( object ):
+
+class modbus_client_timeout( object ):
     """Enforces a strict timeout on a complete transaction, including connection and I/O.  The
     beginning of a transaction is indicated by assigning a timeout to the transaction property.  At
     any point, the remaining time available is computed by accessing the transaction property.
@@ -112,7 +114,7 @@ class ModbusClientTimeout( object ):
 
     """
     def __init__( self, *args, **kwargs):
-        super( ModbusClientTimeout, self ).__init__( *args, **kwargs )
+        super( modbus_client_timeout, self ).__init__( *args, **kwargs )
         self._started	= None
         self._timeout	= None
 
@@ -156,7 +158,7 @@ class ModbusClientTimeout( object ):
 
         r, w, e			= select.select( [self.socket], [], [], timeout )
         if r:
-            result		= super( ModbusClientTimeout, self )._recv( size )
+            result		= super( modbus_client_timeout, self )._recv( size )
             log.debug( "Receive success in %7.3f/%7.3fs" % ( cpppo.timer() - begun, timeout ) )
             return result
 
@@ -166,7 +168,7 @@ class ModbusClientTimeout( object ):
                 self.host, self.port ))
 
 
-class ModbusTcpClientTimeout( ModbusClientTimeout, ModbusTcpClient ):
+class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
 
     def connect(self):
         """Duplicate the functionality of connect (handling optional .source_address attribute added
@@ -190,7 +192,7 @@ class ModbusTcpClientTimeout( ModbusClientTimeout, ModbusTcpClient ):
         return self.socket != None
 
 
-class ModbusSerialClientTimeout( ModbusClientTimeout, ModbusSerialClient ):
+class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
     pass
 
             
@@ -248,8 +250,9 @@ def merge( ranges, reach=1, limit=None ):
 
 
 class poller_modbus( poller, threading.Thread ):
-    """A PLC object that communicates with a physical PLC via Modbus/{TCP,RTU} protocol.  Schedules
-    polls of various registers at various poll rates, prioritizing the polls by age.
+    """A PLC object that communicates with a physical PLC via Modbus/{TCP,RTU} protocol, using the
+    provided modbus_client_{tcp,rtu} instance.  Schedules polls of various registers at various
+    poll rates, prioritizing the polls by age.
 
     Writes are transmitted at the earliest opportunity, and are synchronous (ie. do not return 'til
     the write is complete, or the plc is already offline).
@@ -257,14 +260,15 @@ class poller_modbus( poller, threading.Thread ):
     The first completely failed poll (no successful PLC I/O transactions) marks
     the PLC as offline, and it stays offline 'til a poll again succeeds.
 
-    Only a single PLC I/O transaction is allowed to execute on ModbusTcpClient*, with self.lock.
+    Only a single PLC I/O transaction is allowed to execute on the client, with self.lock.
 
     """
-    def __init__( self, description,
-                  host='localhost', port=Defaults.Port, reach=100, **kwargs ):
+    def __init__( self, description, client, reach=100, **kwargs ):
         poller.__init__( self, description=description, **kwargs )
         threading.Thread.__init__( self, target=self._poller )
-        self.client		= ModbusTcpClientTimeout( host=host, port=port )
+        assert isinstance( client, modbus_client_timeout ), \
+            "Must provide a modbus_client_{tcp,rtu}"
+        self.client		= client
         self.lock		= threading.Lock()
         self.daemon		= True
         self.done		= False

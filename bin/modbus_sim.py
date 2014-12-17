@@ -389,7 +389,7 @@ def main():
             "A range of serial ports is unsupported"
     else:
         starter			= StartTcpServerLogging
-        framer			= ModbusSockerFramer
+        framer			= ModbusSocketFramer
         address			= args.address.split(':')
         assert 1 <= len( address ) <= 2
         address			= (
@@ -406,14 +406,14 @@ def main():
     #---------------------------------------------------------------------------# 
     if args.evil == "truncate":
 
-        class ModbusFramerTruncateResponse( framer ):
+        class EvilFramerTruncateResponse( framer ):
             def buildPacket(self, message):
                 ''' Creates a *truncated* ready to send modbus packet.  Truncates from 1
                 to all of the bytes, before returning response.
         
                 :param message: The populated request/response to send
                 '''
-                packet 		= super( self, EvilFramerTruncateresponse ).buildPacket( message )
+                packet 		= super( EvilFramerTruncateresponse, self ).buildPacket( message )
                 datalen		= len( packet )
                 corrlen		= datalen - random.randint( 1, datalen )
         
@@ -434,7 +434,7 @@ def main():
         
                 :param message: The populated request/response to send
                 '''
-                packet 		= super( self, EvilFramerDelayResponse ).buildPacket( message )
+                packet 		= super( EvilFramerDelayResponse, self ).buildPacket( message )
         
                 log.info( "Delaying response for %s seconds", self.delay )
                 delay		= self.delay
@@ -481,7 +481,7 @@ def main():
         
                     if self.what == "transaction":
                         message.transaction_id ^= 0xFFFF
-                        packet		= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                        packet	= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                         message.transaction_id ^= 0xFFFF
                     elif self.what == "registers":
                         if isinstance( message, ReadRegistersResponseBase ):
@@ -492,32 +492,32 @@ def main():
                                 message.registers += [999]
                             else:
                                 message.registers = message.registers[:-1]
-                            packet		= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                            packet		= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                             message.registers	= saveregs
                         elif isinstance( message, WriteSingleRegisterResponse ):
                             # Flip the responses address bits and then flip them back.
                             message.address    ^= 0xFFFF
-                            packet		= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                            packet		= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                             message.address    ^= 0xFFFF
                         elif isinstance( message, WriteMultipleRegisterResponse ):
                             # Flip the responses address bits and then flip them back.
                             message.address    ^= 0xFFFF
-                            packet		= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                            packet		= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                             message.address    ^= 0xFFFF
                         else:
                             raise NotImplementedException(
                                 "Unhandled class for register corruption; not implemented" )
                     elif self.what == "protocol":
                         message.protocol_id    ^= 0xFFFF
-                        packet			= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                        packet			= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                         message.protocol_id    ^= 0xFFFF
                     elif self.what == "unit":
                         message.unit_id	       ^= 0xFF
-                        packet			= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                        packet			= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                         message.unit_id	       ^= 0xFF
                     elif self.what == "function":
                         message.function_code  ^= 0xFF
-                        packet			= super( self, EvilFramerCorruptResponse ).buildPacket( message )
+                        packet			= super( EvilFramerCorruptResponse, self ).buildPacket( message )
                         message.function_code  ^= 0xFF
                     else:
                         raise NotImplementedException(

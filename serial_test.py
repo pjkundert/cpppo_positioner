@@ -92,31 +92,12 @@ class nonblocking_command( object ):
         logging.info("Command (PID [%d]) finished with status [%d]: %s", self.process.pid, self.process.returncode, self.command )
 
     __del__			= kill
-@pytest.fixture(scope="module")
-def simulated_modbus_rtu():
-    """Start a simulator on a serial device PORT_SLAVE, reporting as the specified
-    slave(s) (any slave ID, if 'slave' keyword is missing or None); parse
-    whether device successfully opened.  Pass any remaining kwds as config
-    options.
 
-    """
+
+def start_modbus_simulator( options ):
     command			= nonblocking_command( [
         os.path.join( '.', 'bin', 'modbus_sim.py' ), 
-        '-vvv', '--log', '.'.join( [
-            'serial_test', 'modbus_sim', 'log', os.path.basename( PORT_SLAVE )] ),
-        #'--evil', 'delay:.0-.1',
-        '--address', PORT_SLAVE,
-        '    1 -  1000 = 0',
-        '40001 - 41000 = 0',
-        # Configure Modbus/RTU simulator to use specified port serial framing
-        '--config', json.dumps( {
-            'stopbits': PORT_STOPBITS,
-            'bytesize': PORT_BYTESIZE,
-            'parity':   PORT_PARITY,
-            'baudrate': PORT_BAUDRATE,
-            'slaves':	RTU_SLAVES,
-        } )
-    ] )
+    ] + list( options ))
 
     begun			= cpppo.timer()
     address			= None
@@ -137,12 +118,11 @@ def simulated_modbus_rtu():
             time.sleep( RTU_LATENCY )
         while data.find( '\n' ) >= 0:
             line,data		= data.split('\n', 1)
-            logging.warning( "%s", data )
+            logging.info( "%s", line )
             m			= re.search( "address = (.*)", line )
             if m:
                 try:
                     host,port	= m.group(1).split(':')
-                    address[1]	= int( address[1] )
                     address	= host,int(port)
                     logging.normal( "Modbus/TCP Simulator started after %7.3fs on %s:%d",
                                     cpppo.timer() - begun, address[0], address[1] )
@@ -153,6 +133,32 @@ def simulated_modbus_rtu():
                                     cpppo.timer() - begun, address )
                 break
     return command,address
+
+
+@pytest.fixture(scope="module")
+def simulated_modbus_rtu():
+    """Start a simulator on a serial device PORT_SLAVE, reporting as the specified
+    slave(s) (any slave ID, if 'slave' keyword is missing or None); parse
+    whether device successfully opened.  Pass any remaining kwds as config
+    options.
+
+    """
+    return start_modbus_simulator( options=[
+        '-vvv', '--log', '.'.join( [
+            'serial_test', 'modbus_sim', 'log', os.path.basename( PORT_SLAVE )] ),
+        #'--evil', 'delay:.0-.1',
+        '--address', PORT_SLAVE,
+        '    1 -  1000 = 0',
+        '40001 - 41000 = 0',
+        # Configure Modbus/RTU simulator to use specified port serial framing
+        '--config', json.dumps( {
+            'stopbits': PORT_STOPBITS,
+            'bytesize': PORT_BYTESIZE,
+            'parity':   PORT_PARITY,
+            'baudrate': PORT_BAUDRATE,
+            'slaves':	RTU_SLAVES,
+        } )
+    ] )
 
 
 def test_rs485( simulated_modbus_rtu ):
