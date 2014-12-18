@@ -54,6 +54,7 @@ import json
 import logging
 import os
 import random
+import select
 import socket
 import struct
 import sys
@@ -69,7 +70,7 @@ except ImportError:
 #---------------------------------------------------------------------------# 
 # import the various server implementations
 #---------------------------------------------------------------------------# 
-from pymodbus.server.sync import ModbusTcpServer, ModbusSerialServer
+from pymodbus.server.sync import ModbusTcpServer, ModbusSerialServer, ModbusSingleRequestHandler
 
 from pymodbus.datastore import ModbusSequentialDataBlock, ModbusSparseDataBlock
 from pymodbus.datastore import ModbusSlaveContext, ModbusServerContext
@@ -207,7 +208,7 @@ def registers_context( registers, slaves=None ):
             if len( val ) < end - beg + 1:
                 val 	       *= (( end - beg + 1 ) / len( val ) + 1 )
             val 			= val[:end - beg + 1]
-            log.info( "%05d-%05d = %s" % ( beg, end, reprlib.repr( val )))
+            log.info( "%05d-%05d = %s", beg, end, reprlib.repr( val ))
             for reg in xrange( beg, end + 1 ):
                 dct, off 	= (     ( hrd, 40001 ) if reg >= 40001
                                    else ( ird, 30001 ) if reg >= 30001
@@ -215,12 +216,12 @@ def registers_context( registers, slaves=None ):
                                    else ( cod,     1 ))
                 dct[reg - off] 	= val[reg - beg]
         except Exception as exc:
-            log.error( "Unrecognized registers '%s': %s" % ( txt, str( exc )))
+            log.error( "Unrecognized registers '%s': %s", txt, str( exc ))
             raise
-        log.info( "Holding Registers: %s" % ( reprlib.repr( hrd )))
-        log.info( "Input   Registers: %s" % ( reprlib.repr( ird )))
-        log.info( "Output  Coils:     %s" % ( reprlib.repr( cod )))
-        log.info( "Discrete Inputs:   %s" % ( reprlib.repr( did )))
+        log.info( "Holding Registers: %s", reprlib.repr( hrd ))
+        log.info( "Input   Registers: %s", reprlib.repr( ird ))
+        log.info( "Output  Coils:     %s", reprlib.repr( cod ))
+        log.info( "Discrete Inputs:   %s", reprlib.repr( did ))
     store = ModbusSlaveContext(
         di = ModbusSparseDataBlock( did ) if did else None,
         co = ModbusSparseDataBlock( cod ) if cod else None,
@@ -271,16 +272,67 @@ def StartTcpServerLogging( registers, identity=None, framer=ModbusSocketFramer, 
 
 def StartRtuServerLogging( registers, identity=None, framer=ModbusRtuFramer, address=None, 
                            slaves=None, **kwds ):
-    ''' A factory to start and run a Modbus/RTU server
+    '''A factory to start and run a Modbus/RTU server
 
     :param registers: The register ranges (and optional values) to serve
     :param identity: An optional identify structure
     :param address: An optional serial port device to bind to (passes 'address' as 'port').
     :param slaves: An optional single (or list of) Slave IDs to serve
+
+    Unfortunately, the standard ModbusSerialServer uses the PySerial Serial.read
+    (with its default buffer size of 1), as an equivalent to Socket.recv (with
+    its default of 1024 bytes).  It is not semantically equivalent.  The
+    Socket.recv will block indefinitely, and then return all the data available
+    (up to and including 1024 bytes), which will eventually include a complete
+    transaction.  The Serial.read will block indefinitely 'til its either
+    achieves its target number of bytes or times out.  
+
+    If ModbusSerialServer instead invoked the recv method with its default
+    number of bytes (1, for Serial.read), then this might work; we would
+    receive, frame and respond to an incoming request as soon as its last byte
+    arrived.  However, ModbusSerialServer calls it with 1024, forcing
+    Serial.read to time out -- every request always takes at least
+    Defaults.Timeout to arrive (awaiting the next byte after the termination of
+    the request, which never arrives)!
+
+    Therefore, we need to path ModbusSerialServer._build_handler, to provide a
+    semantically correct recv.  It differs from ModbusSerialClient in that
+    receiving nothing is not an error.
+
     '''
+    class modbus_server_rtu( ModbusSerialServer ):
+        def _build_handler( self ):
+
+            def recv( size=1024 ):
+                begun		= time.time()
+                log.debug( "Receive begins  in %7.3f/%7.3fs", time.time() - begun, self.socket._timeout )
+                read		= bytearray()
+                r,w,e		= select.select( [self.socket.fd], [], [], self.socket._timeout )
+                while r and len( read ) < size:
+                    # Still readable, and size not yet satisfied; get the next one
+                    buf			= os.read( self.socket.fd, 1 )
+                    if not buf:
+                        raise SerialException('device reports readiness to read but returned no data (device disconnected or multiple access on port?)')
+                    read.extend( buf )
+                    log.debug( "Receive reading in %7.3f/%7.3fs; %d bytes", time.time() - begun, self.socket._timeout,
+                               len( read ))
+                    r,w,e		= select.select( [self.socket.fd], [], [], 0 ) # Something read! No more waiting
+        
+                log.debug( "Receive success in %7.3f/%7.3fs; %d bytes", time.time() - begun, self.socket._timeout,
+                           len( read ))
+                return bytes( read )
+
+            request		= self.socket
+            request.send	= request.write
+            request.recv	= recv
+            handler		= ModbusSingleRequestHandler( request, (self.device, self.device), self )
+            return handler
+
     context			= registers_context( registers, slaves=slaves )
-    server			= ModbusSerialServer( context, framer, identity, port=address,
+    server			= modbus_server_rtu( context, framer, identity, port=address,
                                                       **kwds )
+
+
     # Print the address successfully bound; this is useful, if attempts are made
     # to bind over a range of ports.
     print( "Success; Started Modbus/RTU Simulator; PID = %d; address = %s" % (
@@ -374,7 +426,8 @@ def main():
             logging.error( "Modbus/RTU not supported; ensure PySerial is available" )
             raise
         starter_kwds		= {
-            # Default serial configs; may be overridden, eg: --config '{"baudrate":19200}'
+            # Default serial configs; may be overridden, eg:
+            #     --config '{"baudrate":19200, "slaves":[1,2,3]}'
             'stopbits':			1,
             'bytesize':			8,
             'parity':			serial.PARITY_NONE,
@@ -537,7 +590,7 @@ def main():
 
     elif args.evil:
 
-        log.error("Unrecognized --evil argument: %s" % args.evil )
+        log.error( "Unrecognized --evil argument: %s", args.evil )
         return 1
 
     if args.config:

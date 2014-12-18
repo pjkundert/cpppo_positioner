@@ -12,8 +12,15 @@ import subprocess
 import subprocess
 import sys
 import time
+import traceback
+
 
 import cpppo
+from remote.plc_modbus import poller_modbus, modbus_client_rtu
+from pymodbus.constants import Defaults
+
+logging.basicConfig( level=logging.DEBUG, datefmt='%m-%d %H:%M:%S',
+        format='%(asctime)s.%(msecs).03d %(thread)16x %(name)-8.8s %(levelname)-8.8s %(funcName)-10.10s %(message)s' )
 
 PORT_MASTER			= "/dev/ttyS1"
 PORT_SLAVE			= "/dev/ttyS0"
@@ -21,7 +28,7 @@ PORT_SLAVE			= "/dev/ttyS0"
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
-PORT_BAUDRATE			= 19200
+PORT_BAUDRATE			= 115200
 PORT_TIMEOUT			= 1.5
 
 # Configure minimalmodbus to use the specified port serial framing
@@ -34,7 +41,8 @@ minimalmodbus.TIMEOUT		= PORT_TIMEOUT
 
 RTU_WAIT			= 2.0  # How long to wait for the simulator
 RTU_LATENCY			= 0.05 # poll for command-line I/O response 
-RTU_SLAVES			= 1
+RTU_TIMEOUT			= 0.1  # latency while simulated slave awaits next incoming byte
+RTU_SLAVES			= [1,2]
 
 
 class nonblocking_command( object ):
@@ -137,10 +145,14 @@ def start_modbus_simulator( options ):
 
 @pytest.fixture(scope="module")
 def simulated_modbus_rtu():
-    """Start a simulator on a serial device PORT_SLAVE, reporting as the specified
-    slave(s) (any slave ID, if 'slave' keyword is missing or None); parse
-    whether device successfully opened.  Pass any remaining kwds as config
-    options.
+    """Start a simulator on a serial device PORT_SLAVE, reporting as the specified slave(s) (any slave
+    ID, if 'slave' keyword is missing or None); parse whether device successfully opened.  Pass any
+    remaining kwds as config options.
+
+    TODO: Implement RS485 inter-character and pre/post request timeouts properly.  Right now, the
+    simulator just waits forever for the next character and tries to frame requests.  It should fail
+    a request if it ever sees an inter-character delay of > 1.5 character widths, and it also
+    expects certain delays before/after requests.
 
     """
     return start_modbus_simulator( options=[
@@ -157,18 +169,20 @@ def simulated_modbus_rtu():
             'parity':   PORT_PARITY,
             'baudrate': PORT_BAUDRATE,
             'slaves':	RTU_SLAVES,
+            'timeout':  RTU_TIMEOUT, # TODO: implement meaningfully; basically ignored
+            'ignore_missing_slaves': True,
         } )
     ] )
 
 
-def test_rs485( simulated_modbus_rtu ):
+def test_rs485_basic( simulated_modbus_rtu ):
     """Use MinimalModbus to test RS485 read/write. """
-    command,address		= simulated_modbus_rtu
-    logging.warning( "Started Modbus Server on: %s", address )
     groups			= subprocess.check_output( ['groups'] )
     assert 'dialout' in groups, \
         "Ensure that the user is in the dialout group; run 'addgroup %s dialout'" % (
             os.environ.get( 'USER', '(unknown)' ))
+
+    command,address		= simulated_modbus_rtu
 
     comm			= minimalmodbus.Instrument( port=PORT_MASTER, slaveaddress=1 )
     comm.debug			= True
@@ -178,3 +192,62 @@ def test_rs485( simulated_modbus_rtu ):
     val				= comm.read_register( 1 )
     assert val == 99
     comm.write_register( 1, 0 )
+
+
+def await( pred, what="predicate", delay=1.0, intervals=10 ):
+    """Await the given predicate, returning: (success,elapsed)"""
+    begun			= cpppo.timer()
+    truth			= False
+    for _ in range( intervals ):
+        truth			= pred()
+        if truth:
+            break
+        time.sleep( delay/intervals )
+    now				= cpppo.timer()
+    elapsed			= now - begun
+    logging.info( "After %7.3f/%7.3f %s %s" % (
+        elapsed, delay, "detected" if truth else "missed  ", what ))
+    return truth,elapsed
+
+def test_rs485_poll( simulated_modbus_rtu ):
+    """Multiple poller_modbus instances may be polling different slave RTUs at different unit IDs.
+
+    """
+
+    command,address		= simulated_modbus_rtu
+    Defaults.Timeout		= PORT_TIMEOUT
+    client			= modbus_client_rtu( method='rtu',
+        port=PORT_MASTER, stopbits=PORT_STOPBITS, bytesize=PORT_BYTESIZE,
+        parity=PORT_PARITY, baudrate=PORT_BAUDRATE )
+
+    unit			= 2
+    plc				= poller_modbus( "RS485 unit %s" % ( unit ), client=client, unit=unit )
+    try:
+        plc.write( 1, 0 )
+        plc.write( 40001, 0 )
+
+        plc.poll( 40001, rate=1.0 )
+
+        success,elapsed		= await( lambda: plc.read( 40001 ) is not None, "40001 polled" )
+        assert success
+        assert elapsed < 1.0
+        assert plc.read( 40001 ) == 0
+    
+        assert plc.read(     1 ) == None
+        assert plc.read( 40002 ) == None
+        success, elapsed	= await( lambda: plc.read( 40002 ) is not None, "40002 polled" )
+        assert success
+        assert elapsed < 1.0
+        assert plc.read( 40002 ) == 0
+        success,elapsed		= await( lambda: plc.read(     1 ) is not None, "00001 polled" )
+        assert success
+        assert elapsed < 1.0
+        assert plc.read(     1 ) == 0
+
+    except Exception as exc:
+        logging.warning( "%s poller failed: %s", plc.description, traceback.format_exc() )
+        raise
+    finally:
+        logging.info( "Stopping plc polling" )
+        plc.done		= True
+        await( lambda: not plc.is_alive(), "%s poller done" % ( plc.description ))

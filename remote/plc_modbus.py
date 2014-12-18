@@ -31,6 +31,7 @@ __all__				= ['modbus_client_timeout',
                                    'ModbusTcpServerActions', 'poller_modbus']
 
 import logging
+import os
 import select
 import socket
 import sys
@@ -87,7 +88,7 @@ class ModbusTcpServerActions( ModbusTcpServer ):
         self._BaseServer__is_shut_down.clear()
         try:
             while not self._BaseServer__shutdown_request:
-                r, w, e = _eintr_retry( select.select, [self], [], [], poll_interval )
+                r,w,e 		= _eintr_retry( select.select, [self], [], [], poll_interval )
                 if self in r:
                     self._handle_request_noblock()
 
@@ -109,14 +110,24 @@ class modbus_client_timeout( object ):
     If .timeout is set to True/0, uses Defaults.Timeout around the entire transaction.  If
     transaction is never set or set to None, Defaults.Timeout is always applied to every I/O
     operation, independently (the original behaviour).
-    
+
     Otherwise, the specified non-zero timeout is applied to the entire transaction.
 
+    If a mutual exclusion lock on a <client> instance is desired (eg. if multiple Threads may be
+    attempting to access this client simultaneously, eg. in the case where several independent
+    Threads are accessing several slaves via multi-drop serial), it may be obtained using:
+
+        with <client>:
+            ...
+
+    Note that such locks will *not* respond to any remaining transaction timeout!
+
     """
-    def __init__( self, *args, **kwargs):
+    def __init__( self, *args, **kwargs ):
         super( modbus_client_timeout, self ).__init__( *args, **kwargs )
         self._started	= None
         self._timeout	= None
+        self._lock	= threading.Lock()
 
     @property
     def timeout( self ):
@@ -144,28 +155,17 @@ class modbus_client_timeout( object ):
             self._timeout = None
         else:
             self._started = cpppo.timer()
-            self._timeout = ( Defaults.Timeout 
+            self._timeout = ( Defaults.Timeout
                               if ( timeout is True or timeout == 0 )
                               else timeout )
 
-    def _recv( self, size ):
-        """On a receive timeout, closes the socket and raises a ConnectionException.  Otherwise,
-        returns the available input"""
-        if not self.socket:
-            raise ConnectionException( self.__str__() )
-        begun			= cpppo.timer()
-        timeout			= self.timeout # This computes the remaining timeout available
+    def __enter__( self ):
+        self._lock.acquire( True )
+        return self
 
-        r, w, e			= select.select( [self.socket], [], [], timeout )
-        if r:
-            result		= super( modbus_client_timeout, self )._recv( size )
-            log.debug( "Receive success in %7.3f/%7.3fs" % ( cpppo.timer() - begun, timeout ) )
-            return result
-
-        self.close()
-        log.debug( "Receive failure in %7.3f/%7.3fs" % ( cpppo.timer() - begun, timeout ) )
-        raise ConnectionException("Receive from (%s, %s) failed: Timeout" % (
-                self.host, self.port ))
+    def __exit__( self, typ, val, tbk ):
+        self._lock.release()
+        return False
 
 
 class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
@@ -176,7 +176,7 @@ class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
 
         """
         if self.socket: return True
-        log.debug( "Connecting to (%s, %s)" % ( self.host, self.port ))
+        log.debug( "Connecting to (%s, %s)", getattr( self, 'host', '(serial)' ), self.port )
         begun			= cpppo.timer()
         timeout			= self.timeout # This computes the remaining timeout available
         try:
@@ -191,21 +191,98 @@ class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
 
         return self.socket != None
 
+    def _recv( self, size ):
+        """On a receive timeout, closes the socket and raises a ConnectionException.  Otherwise,
+        returns the available input"""
+        if not self.socket:
+            raise ConnectionException( self.__str__() )
+        begun			= cpppo.timer()
+        timeout			= self.timeout # This computes the remaining timeout available
+        log.debug( "Receive begins  in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+        r,w,e			= select.select( [self.socket], [], [], timeout )
+        if r:
+            log.debug( "Receive reading in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+            result		= super( modbus_client_timeout, self )._recv( size )
+            log.debug( "Receive success in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+            return result
+
+        self.close()
+        log.debug( "Receive failure in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+        raise ConnectionException("Receive from (%s, %s) failed: Timeout" % (
+                getattr( self, 'host', '(serial)' ), self.port ))
+
+    def __repr__( self ):
+        return "<%s: %s>" % ( self, self.socket.__repr__() if self.socket else "closed" )
+
 
 class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
-    pass
 
-            
+    def connect( self ):
+        """Reconnect to the serial port, if we've been disconnected (eg. due to poll failure).  Since the
+        connect will either immediately succeed or fail, we won't bother implementing a timeout.
+
+        """
+        if self.socket: return True
+        log.debug( "Connecting to (%s, %s)", getattr( self, 'host', '(serial)' ), self.port )
+        connected		= super( modbus_client_rtu, self ).connect()
+        log.debug( "%r: inter-char timeout: %s", self,
+                   self.socket.getInterCharTimeout() if self.socket else None )
+        return connected
+
+    def _recv( self, size ):
+        """Replicate the approximate semantics of a socket recv; return what's available.  However,
+        don't return Nothing (indicating an EOF).  So, wait for up to remaining 'self.timeout'
+        for something to show up, but return immediately with whatever is there.
+
+        We'll do it simply -- just read one at a time from the serial port.  We could find out how
+        many bytes are available using the TIOCINQ ioctl, but this won't work on non-Posix systems.
+        We can't just use the built-in Serial's read method and adjust its own _timeout to reflect
+        our own remaining timeout -- we must only block 'til we have at least one character, and
+        then continue reading 'til no more input is immediately available; there is no way to invoke
+        Serial.read to indicate that.
+
+        """
+        if not self.socket:
+            raise ConnectionException( self.__str__() )
+        begun			= cpppo.timer()
+        timeout			= self.timeout # This computes the remaining timeout available
+        log.debug( "Receive begins  in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+        
+        read			= bytearray()
+        remains			= timeout
+        r,w,e			= select.select( [self.socket.fd], [], [], timeout )
+        while r and len( read ) < size:
+            # Still readable, and size not yet satisfied; get the next one
+            buf			= os.read( self.socket.fd, 1 )
+            if not buf:
+                break # reports readable, but nothing there...  Disconnected hardware?  Report later.
+            read.extend( buf )
+            log.debug( "Receive reading in %7.3f/%7.3fs; %d bytes", cpppo.timer() - begun, timeout,
+                       len( read ))
+            r,w,e		= select.select( [self.socket.fd], [], [], 0 ) # Something read! No more waiting
+
+        if len( read ):
+            log.debug( "Receive success in %7.3f/%7.3fs; %d bytes", cpppo.timer() - begun, timeout,
+                       len( read ))
+            return bytes( read )
+
+        # Nothing within timeout; potential client failure, disconnected hardware.  Force a re-open
+        self.close()
+        log.debug( "Receive failure in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+        raise ConnectionException("Receive from (%s, %s) failed: Timeout" % (
+                getattr( self, 'host', '(serial)' ), self.port ))
+        
+
 def shatter( address, count, limit=None ):
     """ Yields (address, count) ranges of length 'limit' sufficient to cover the
     given range.  If no limit, we'll deduce some appropriate limits for the
     deduced register type, appropriate for either multi-register reads or
     writes. """
     if not limit:
-        if (        1 <= address <= 9999 
+        if (        1 <= address <= 9999
             or  10001 <= address <= 19999
             or 100001 <= address <= 165536 ):
-            # Coil read/write or Status read.  
+            # Coil read/write or Status read.
             limit	= 1968
         else:
             # Other type of register read/write (eg. Input, Holding)
@@ -256,20 +333,26 @@ class poller_modbus( poller, threading.Thread ):
 
     Writes are transmitted at the earliest opportunity, and are synchronous (ie. do not return 'til
     the write is complete, or the plc is already offline).
-    
+
     The first completely failed poll (no successful PLC I/O transactions) marks
     the PLC as offline, and it stays offline 'til a poll again succeeds.
 
-    Only a single PLC I/O transaction is allowed to execute on the client, with self.lock.
+    Only a single PLC I/O transaction is allowed to execute on the client, with self.client:...
+
+    A 'unit' ID value may be provided; if not, Defaults.UnitId will be used.  This is normally 0x00
+    (broadcast?), so it inappropriate for multi-drop slaves (eg. RS485).  The supplied default
+    'unit' will be passed to all read/write requests (unless a 'unit' keyword is supplied to write
+    request).  Since all 'read' requests are actually returning the results of the last polled
+    value, all underlying polling _reads use the supplied 'unit' value.
 
     """
-    def __init__( self, description, client, reach=100, **kwargs ):
+    def __init__( self, description, client, reach=100, unit=None, **kwargs ):
         poller.__init__( self, description=description, **kwargs )
         threading.Thread.__init__( self, target=self._poller )
         assert isinstance( client, modbus_client_timeout ), \
             "Must provide a modbus_client_{tcp,rtu}"
         self.client		= client
-        self.lock		= threading.Lock()
+        self.unit		= Defaults.UnitId if unit is None else unit
         self.daemon		= True
         self.done		= False
         self.reach		= reach		# Merge registers this close into ranges
@@ -287,7 +370,7 @@ class poller_modbus( poller, threading.Thread ):
 
         We'll log whenever we begin/cease polling any given range of registers.
         """
-        log.info( "Poller starts: %r, %r " % ( args, kwargs ))
+        log.info( "Poller starts: %r, %r ", args, kwargs )
         target			= cpppo.timer()
         while not self.done and logging:	# Module may be gone in shutting down
             # Poller is dormant 'til a non-None/zero rate and data specified
@@ -305,7 +388,7 @@ class poller_modbus( poller, threading.Thread ):
             # the next poll cycle target; this attempts to retain cadence.
             slipped		= int( ( now - target ) / self.rate )
             if slipped:
-                log.normal( "Polling slipped; missed %d cycles" % ( slipped ))
+                log.normal( "Polling: PLC %s slipped; missed %d cycles", self.description, slipped )
             target	       += self.rate * ( slipped + 1 )
 
             # Perform polls, re-acquiring lock between each poll to allow others
@@ -326,19 +409,20 @@ class poller_modbus( poller, threading.Thread ):
             fail		= set()
             busy		= 0.0
             for address, count in rngs:
-                with self.lock:
+                with self.client: # block 'til we can begin a transaction
                     begin	= cpppo.timer()
                     try:
                         # Read values; on success (no exception, something other
                         # than None returned), immediately take online;
                         # otherwise attempts to _store will be rejected.
-                        value	= self._read( address, count )
+                        value	= self._read( address, count, unit=self.unit )
                         if not self.online:
                             self.online = True
-                            log.critical( "Polling: PLC %s online; success polling %s: %s" % (
-                                    self.description, address, cpppo.reprlib.repr( value )))
+                            log.critical( "Polling: PLC %s online; success polling %s: %s",
+                                    self.description, address, cpppo.reprlib.repr( value ))
                         if (address,count) not in self.polling:
-                            log.detail( "Polling %6d-%-6d (%5d)" % ( address, address+count-1, count ))
+                            log.detail( "Polling: PLC %s %6d-%-6d (%5d)", self.description,
+                                        address, address+count-1, count )
                         succ.add( (address, count) )
                         self._store( address, value ) # Handle scalar or list/tuple value(s)
                     except ModbusException as exc:
@@ -346,13 +430,13 @@ class poller_modbus( poller, threading.Thread ):
                         # the first time failure to poll this range is detected
                         fail.add( (address, count) )
                         if (address, count) not in self.failing:
-                            log.warning( "Failing %6d-%-6d (%5d): %s" % (
-                                    address, address+count-1, count, str( exc )))
+                            log.warning( "Failing: PLC %s %6d-%-6d (%5d): %s", self.description,
+                                         address, address+count-1, count, str( exc ))
                     except Exception as exc:
                         # Something else; always log
                         fail.add( (address, count) )
-                        log.warning( "Failing %6d-%-6d (%5d): %s" % (
-                                address, address+count-1, count, traceback.format_exc() ))
+                        log.warning( "Failing: PLC %s %6d-%-6d (%5d): %s", self.description,
+                                address, address+count-1, count, traceback.format_exc() )
                     busy       += cpppo.timer() - begin
 
                 # Prioritize other lockers (ie. write).  Contrary to popular opinion, sleep(0) does
@@ -363,7 +447,8 @@ class poller_modbus( poller, threading.Thread ):
             # polls that have ceased (failed, or been replaced by larger polls)
             ceasing		= self.polling - succ - fail
             for address, count in ceasing:
-                log.info( "Ceasing %6d-%-6d (%5d)" % ( address, address+count-1, count ))
+                log.info( "Ceasing: PLC %s %6d-%-6d (%5d)", self.description,
+                          address, address+count-1, count )
 
             self.polling	= succ
             self.failing	= fail
@@ -385,19 +470,20 @@ class poller_modbus( poller, threading.Thread ):
             # we're not yet offline, warn and take offline, and then eport the completion of another
             # poll cycle.
             if self._data and not succ and self.online:
-                log.critical( "Polling: PLC %s offline" % ( self.description ))
+                log.critical( "Polling: PLC %s offline", self.description )
                 self.online	= False
             self.counter       += 1
 
-
     def write( self, address, value, **kwargs ):
-        with self.lock:
+        with self.client: # block 'til we can begin a transaction
             super( poller_modbus, self ).write( address, value, **kwargs )
 
     def _write( self, address, value, **kwargs ):
-        """Perform the write, enforcing Defaults.Timeout around the entire transaction.
-        Normally returns None, but may raise a ModbusException or a PlcOffline
-        if there are communications problems.
+        """Perform the write, enforcing Defaults.Timeout around the entire transaction.  Normally
+        returns None, but may raise a ModbusException or a PlcOffline if there are communications
+        problems.
+
+        Use a supplied 'unit' ID, or the one specified/deduced at construction.
 
         """
         self.client.timeout 	= True
@@ -413,17 +499,17 @@ class poller_modbus( poller, threading.Thread ):
         writer			= None
         if 400001 <= address <= 465536:
             # 400001-465536: Holding Registers
-            writer		= ( WriteMultipleRegistersRequest 
+            writer		= ( WriteMultipleRegistersRequest
                                     if multi else WriteSingleRegisterRequest )
             address    	       -= 400001
         elif 40001 <= address <= 99999:
             #  40001-99999: Holding Registers
-            writer		= ( WriteMultipleRegistersRequest if multi 
+            writer		= ( WriteMultipleRegistersRequest if multi
                                     else WriteSingleRegisterRequest )
             address    	       -= 40001
         elif 1 <= address <= 9999:
             #      1-9999: Coils
-            writer		= ( WriteMultipleCoilsRequest 
+            writer		= ( WriteMultipleCoilsRequest
                                     if multi else WriteSingleCoilRequest )
             address	       -= 1
         else:
@@ -435,16 +521,18 @@ class poller_modbus( poller, threading.Thread ):
         if not writer:
             raise ParameterException( "Invalid Modbus address for write: %d" % ( address ))
 
-        result			= self.client.execute( writer( address, value, **kwargs ))
+        unit			= kwargs.pop( 'unit', self.unit )
+        result			= self.client.execute( writer( address, value, unit=unit, **kwargs ))
         if isinstance( result, ExceptionResponse ):
             raise ModbusException( str( result ))
         assert isinstance( result, ModbusResponse ), "Unexpected non-ModbusResponse: %r" % result
 
     def _read( self, address, count=1, **kwargs ):
-        """Perform the read, enforcing Defaults.Timeout around the entire transaction.
-        Returns the result bit(s)/regsiter(s), or raises an Exception; probably
-        a ModbusException or a PlcOffline for communications errors, but could
-        be some other type of Exception.
+        """Perform the read, enforcing Defaults.Timeout around the entire transaction.  Returns the
+        result bit(s)/register(s), or raises an Exception; probably a ModbusException or a
+        PlcOffline for communications errors, but could be some other type of Exception.
+
+        Use a supplied 'unit' ID, or the one specified/deduced at construction.
 
         """
         self.client.timeout 	= True
@@ -452,7 +540,7 @@ class poller_modbus( poller, threading.Thread ):
         if not self.client.connect():
             raise PlcOffline( "Modbus Read  of PLC %s/%6d failed: Offline; Connect failure" % (
                     self.description, address ))
-        
+
         # Use address to deduce Holding/Input Register or Coil/Status.
         reader			= None
         if 400001 <= address <= 465536:
@@ -482,7 +570,8 @@ class poller_modbus( poller, threading.Thread ):
         if not reader:
             raise ParameterException( "Invalid Modbus address for read: %d" % ( address ))
 
-        result 			= self.client.execute( reader( address, count, **kwargs ))
+        unit			= kwargs.pop( 'unit', self.unit )
+        result 			= self.client.execute( reader( address, count, unit=unit, **kwargs ))
         if isinstance( result, ExceptionResponse ):
             # The remote PLC returned a response indicating it encountered an
             # error processing the request.  Convert it to raise a ModbusException.
