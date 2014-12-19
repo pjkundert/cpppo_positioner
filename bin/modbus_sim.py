@@ -1,6 +1,29 @@
 #!/usr/bin/env python
 
+
+# 
+# Cpppo -- Communication Protocol Python Parser and Originator
+# 
+# Copyright (c) 2013, Hard Consulting Corporation.
+# 
+# Cpppo is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.  See the LICENSE file at the top of the source tree.
+# 
+# Cpppo is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+# 
+
+from __future__ import absolute_import
 from __future__ import print_function
+from __future__ import division
+
+__author__                      = "Perry Kundert"
+__email__                       = "perry@hardconsulting.com"
+__copyright__                   = "Copyright (c) 2013 Hard Consulting Corporation"
+__license__                     = "Dual License: GPLv3 (or later) and Commercial (see LICENSE)"
 
 '''
 modbus-sim.py -- A Modbus PLC Simulator, with various simulated failure modes
@@ -70,16 +93,32 @@ except ImportError:
 #---------------------------------------------------------------------------# 
 # import the various server implementations
 #---------------------------------------------------------------------------# 
-from pymodbus.server.sync import ModbusTcpServer, ModbusSerialServer, ModbusSingleRequestHandler
-
 from pymodbus.datastore import ModbusSequentialDataBlock, ModbusSparseDataBlock
 from pymodbus.datastore import ModbusSlaveContext, ModbusServerContext
 from pymodbus.constants import Defaults
 from pymodbus.register_read_message import ReadRegistersResponseBase
 from pymodbus.register_write_message import WriteSingleRegisterResponse, WriteMultipleRegistersResponse
 
-from pymodbus.transaction import *
+from pymodbus.transaction import ModbusSocketFramer
 from pymodbus import constants
+
+print( "__name__: %s, __package__: %s, __file__: %s" % ( __name__, __package__, __file__ ))
+if __name__ == "__main__" and __package__ is None:
+    # Ensure that importing works (whether cpppo_positioner installed or not) with:
+    #   python -m cpppo_positioner.bin.modbus_sim ...
+    #   ./cpppo_positioner/bin/modbus_sim.py ...
+    #   ./bin/modbus_sym.py ... y
+    __package__			= "cpppo_positioner.bin"
+    try:
+        import cpppo_positioner
+    except ImportError:
+        # 
+        sys.path.append( os.path.dirname( os.path.dirname( os.path.dirname( os.path.abspath( __file__ )))))
+        
+from cpppo_positioner.remote.pymodbus_fixes import (
+    modbus_server_rtu, modbus_rtu_framer_collecting,
+    modbus_server_tcp )
+
 
 #---------------------------------------------------------------------------# 
 # configure the service logging
@@ -94,7 +133,7 @@ def registers_context( registers, slaves=None ):
     provided Slave IDs.
 
     --------------------------------------------------------------------------
-    initialize your data store, returning an initialized ModbusServerConext
+    initialize your data store, returning an initialized ModbusServerContext
     --------------------------------------------------------------------------
     The datastores only respond to the addresses that they are initialized to.
     Therefore, if you initialize a DataBlock to addresses of 0x00 to 0xFF, a
@@ -206,7 +245,7 @@ def registers_context( registers, slaves=None ):
             if end == beg:
                 end 		= beg + len( val ) - 1
             if len( val ) < end - beg + 1:
-                val 	       *= (( end - beg + 1 ) / len( val ) + 1 )
+                val 	       *= (( end - beg + 1 ) // len( val ) + 1 )
             val 			= val[:end - beg + 1]
             log.info( "%05d-%05d = %s", beg, end, reprlib.repr( val ))
             for reg in xrange( beg, end + 1 ):
@@ -260,7 +299,7 @@ def StartTcpServerLogging( registers, identity=None, framer=ModbusSocketFramer, 
     :param slaves: An optional single (or list of) Slave IDs to serve
     '''
     context			= registers_context( registers, slaves=slaves )
-    server			= ModbusTcpServer( context, framer, identity, address,
+    server			= modbus_server_tcp( context, framer, identity, address,
                                                    **kwds )
     # Print the address successfully bound; this is useful, if attempts are made
     # to bind over a range of ports.
@@ -270,8 +309,8 @@ def StartTcpServerLogging( registers, identity=None, framer=ModbusSocketFramer, 
     server.serve_forever()
 
 
-def StartRtuServerLogging( registers, identity=None, framer=ModbusRtuFramer, address=None, 
-                           slaves=None, **kwds ):
+def StartRtuServerLogging( registers, identity=None, framer=modbus_rtu_framer_collecting,
+                           address=None, slaves=None, **kwds ):
     '''A factory to start and run a Modbus/RTU server
 
     :param registers: The register ranges (and optional values) to serve
@@ -279,59 +318,12 @@ def StartRtuServerLogging( registers, identity=None, framer=ModbusRtuFramer, add
     :param address: An optional serial port device to bind to (passes 'address' as 'port').
     :param slaves: An optional single (or list of) Slave IDs to serve
 
-    Unfortunately, the standard ModbusSerialServer uses the PySerial Serial.read
-    (with its default buffer size of 1), as an equivalent to Socket.recv (with
-    its default of 1024 bytes).  It is not semantically equivalent.  The
-    Socket.recv will block indefinitely, and then return all the data available
-    (up to and including 1024 bytes), which will eventually include a complete
-    transaction.  The Serial.read will block indefinitely 'til its either
-    achieves its target number of bytes or times out.  
-
-    If ModbusSerialServer instead invoked the recv method with its default
-    number of bytes (1, for Serial.read), then this might work; we would
-    receive, frame and respond to an incoming request as soon as its last byte
-    arrived.  However, ModbusSerialServer calls it with 1024, forcing
-    Serial.read to time out -- every request always takes at least
-    Defaults.Timeout to arrive (awaiting the next byte after the termination of
-    the request, which never arrives)!
-
-    Therefore, we need to path ModbusSerialServer._build_handler, to provide a
-    semantically correct recv.  It differs from ModbusSerialClient in that
-    receiving nothing is not an error.
 
     '''
-    class modbus_server_rtu( ModbusSerialServer ):
-        def _build_handler( self ):
-
-            def recv( size=1024 ):
-                begun		= time.time()
-                log.debug( "Receive begins  in %7.3f/%7.3fs", time.time() - begun, self.socket._timeout )
-                read		= bytearray()
-                r,w,e		= select.select( [self.socket.fd], [], [], self.socket._timeout )
-                while r and len( read ) < size:
-                    # Still readable, and size not yet satisfied; get the next one
-                    buf			= os.read( self.socket.fd, 1 )
-                    if not buf:
-                        raise SerialException('device reports readiness to read but returned no data (device disconnected or multiple access on port?)')
-                    read.extend( buf )
-                    log.debug( "Receive reading in %7.3f/%7.3fs; %d bytes", time.time() - begun, self.socket._timeout,
-                               len( read ))
-                    r,w,e		= select.select( [self.socket.fd], [], [], 0 ) # Something read! No more waiting
-        
-                log.debug( "Receive success in %7.3f/%7.3fs; %d bytes", time.time() - begun, self.socket._timeout,
-                           len( read ))
-                return bytes( read )
-
-            request		= self.socket
-            request.send	= request.write
-            request.recv	= recv
-            handler		= ModbusSingleRequestHandler( request, (self.device, self.device), self )
-            return handler
 
     context			= registers_context( registers, slaves=slaves )
     server			= modbus_server_rtu( context, framer, identity, port=address,
                                                       **kwds )
-
 
     # Print the address successfully bound; this is useful, if attempts are made
     # to bind over a range of ports.
@@ -417,9 +409,13 @@ def main():
     # ("interface",502).  If '/', then start a Modbus/RTU serial server,
     # otherwise a Modbus/TCP network server.  Create an address_sequence
     # yielding all the relevant target addresses we might need to try.
+
+    # We must initialize 'framer' here (even if its the same as the 'starter'
+    # default), because we may make an Evil...() derived class below...
     starter_kwds		= {}
     if args.address.startswith( '/' ):
         starter			= StartRtuServerLogging
+        framer			= modbus_rtu_framer_collecting
         try:
             import serial
         except ImportError:
@@ -436,7 +432,6 @@ def main():
             'slaves':			None,
             'ignore_missing_slaves':	True,
         }
-        framer			= ModbusRtuFramer
         address_sequence	= [ args.address ]
         assert args.range == 1, \
             "A range of serial ports is unsupported"

@@ -16,7 +16,8 @@ import traceback
 
 
 import cpppo
-from remote.plc_modbus import poller_modbus, modbus_client_rtu
+from remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
+from remote.plc_modbus import poller_modbus
 from pymodbus.constants import Defaults
 
 logging.basicConfig( level=logging.DEBUG, datefmt='%m-%d %H:%M:%S',
@@ -28,7 +29,7 @@ PORT_SLAVE			= "/dev/ttyS0"
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
-PORT_BAUDRATE			= 115200
+PORT_BAUDRATE			= 4800 # 115200
 PORT_TIMEOUT			= 1.5
 
 # Configure minimalmodbus to use the specified port serial framing
@@ -216,7 +217,7 @@ def test_rs485_poll( simulated_modbus_rtu ):
 
     command,address		= simulated_modbus_rtu
     Defaults.Timeout		= PORT_TIMEOUT
-    client			= modbus_client_rtu( method='rtu',
+    client			= modbus_client_rtu( framer=modbus_rtu_framer_collecting,
         port=PORT_MASTER, stopbits=PORT_STOPBITS, bytesize=PORT_BYTESIZE,
         parity=PORT_PARITY, baudrate=PORT_BAUDRATE )
 

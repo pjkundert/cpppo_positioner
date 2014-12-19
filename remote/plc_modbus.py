@@ -26,9 +26,7 @@ __license__                     = "Dual License: GPLv3 (or later) and Commercial
 """
 remote.plc_modbus -- Modbus PLC polling, reading and writing infrastructure
 """
-__all__				= ['modbus_client_timeout',
-                                   'modbus_client_rtu', 'modbus_client_tcp',
-                                   'ModbusTcpServerActions', 'poller_modbus']
+__all__				= ['shatter', 'merge', 'poller_modbus']
 
 import logging
 import os
@@ -40,238 +38,21 @@ import time
 import traceback
 
 import cpppo
-from   .plc import poller, PlcOffline
-
-# We need to monkeypatch ModbusTcpServer's SocketServer.serve_forever to be
-# Python3 socketserver compatible.  When pymodbus is ported to Python3, this
-# will not be necessary in the Python3 implementation.
-assert sys.version_info.major < 3, "pymodbus is not yet Python3 compatible"
-from pymodbus.server.sync import ModbusTcpServer
-from SocketServer import _eintr_retry
+from .pymodbus_fixes import modbus_client_timeout
+from .plc import poller, PlcOffline
 
 from pymodbus.constants import Defaults
-from pymodbus.client.sync import ModbusTcpClient, ModbusSerialClient
 from pymodbus.exceptions import *
 from pymodbus.bit_read_message import *
 from pymodbus.bit_write_message import *
 from pymodbus.register_read_message import *
 from pymodbus.register_write_message import *
-from pymodbus.pdu import (ExceptionResponse, ModbusResponse)
-
+from pymodbus.pdu import ExceptionResponse, ModbusResponse
 
 if __name__ == "__main__":
     logging.basicConfig( **cpppo.log_cfg )
 
 log				= logging.getLogger( "remote.plc_modbus" )
-
-class ModbusTcpServerActions( ModbusTcpServer ):
-    """Augments the stock pymodbus ModbusTcpServer with the Python3 'socketserver'
-    class periodic invocation of the .service_actions() method from within the
-    main serve_forever loop.  This allows us to perform periodic service:
-
-        class our_modbus_server( ModbusTcpServerActions ):
-            def service_actions( self ):
-                logging.info( "Doing something every ~<seconds>" )
-
-
-        # Start our modbus server, which spawns threads for each new client
-        # accepted, and invokes service_actions every ~<seconds> in between.
-        modbus = ModbusTcpServerActions()
-        modbus.serve_forever( poll_interval=<seconds> )
-
-
-    The serve_forever implementation comes straight from Python3 socketserver,
-    which is basically an enhancement of Python2 SocketServer.
-
-    """
-    def serve_forever( self, poll_interval=.5 ):
-        self._BaseServer__is_shut_down.clear()
-        try:
-            while not self._BaseServer__shutdown_request:
-                r,w,e 		= _eintr_retry( select.select, [self], [], [], poll_interval )
-                if self in r:
-                    self._handle_request_noblock()
-
-                self.service_actions()  # <<< Python3 socketserver added this
-        finally:
-            self._BaseServer__shutdown_request = False
-            self._BaseServer__is_shut_down.set()
-
-    def service_actions( self ):
-        """Override this to receive service every ~poll_interval s."""
-        pass
-
-
-class modbus_client_timeout( object ):
-    """Enforces a strict timeout on a complete transaction, including connection and I/O.  The
-    beginning of a transaction is indicated by assigning a timeout to the transaction property.  At
-    any point, the remaining time available is computed by accessing the transaction property.
-
-    If .timeout is set to True/0, uses Defaults.Timeout around the entire transaction.  If
-    transaction is never set or set to None, Defaults.Timeout is always applied to every I/O
-    operation, independently (the original behaviour).
-
-    Otherwise, the specified non-zero timeout is applied to the entire transaction.
-
-    If a mutual exclusion lock on a <client> instance is desired (eg. if multiple Threads may be
-    attempting to access this client simultaneously, eg. in the case where several independent
-    Threads are accessing several slaves via multi-drop serial), it may be obtained using:
-
-        with <client>:
-            ...
-
-    Note that such locks will *not* respond to any remaining transaction timeout!
-
-    """
-    def __init__( self, *args, **kwargs ):
-        super( modbus_client_timeout, self ).__init__( *args, **kwargs )
-        self._started	= None
-        self._timeout	= None
-        self._lock	= threading.Lock()
-
-    @property
-    def timeout( self ):
-        """Returns the Defaults.Timeout, if no timeout = True|#.# (a hard timeout) has been specified."""
-        if self._timeout in (None, True):
-            log.debug( "Transaction timeout default: %.3fs" % ( Defaults.Timeout ))
-            return Defaults.Timeout
-        now		= cpppo.timer()
-        eta		= self._started + self._timeout
-        if eta > now:
-            log.debug( "Transaction timeout remaining: %.3fs" % ( eta - now ))
-            return eta - now
-        log.debug( "Transaction timeout expired" )
-        return 0
-    @timeout.setter
-    def timeout( self, timeout ):
-        """When a self.timeout = True|0|#.# is specified, initiate a hard timeout around the following
-        transaction(s).  This means that any connect and/or read/write (_recv) must complete within
-        the specified timeout (Defaults.Timeout, if 'True' or 0), starting *now*.  Reset to default
-        behaviour with self.timeout = None.
-
-        """
-        if timeout is None:
-            self._started = None
-            self._timeout = None
-        else:
-            self._started = cpppo.timer()
-            self._timeout = ( Defaults.Timeout
-                              if ( timeout is True or timeout == 0 )
-                              else timeout )
-
-    def __enter__( self ):
-        self._lock.acquire( True )
-        return self
-
-    def __exit__( self, typ, val, tbk ):
-        self._lock.release()
-        return False
-
-
-class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
-
-    def connect(self):
-        """Duplicate the functionality of connect (handling optional .source_address attribute added
-        in pymodbus 1.2.0), but pass the computed remaining timeout.
-
-        """
-        if self.socket: return True
-        log.debug( "Connecting to (%s, %s)", getattr( self, 'host', '(serial)' ), self.port )
-        begun			= cpppo.timer()
-        timeout			= self.timeout # This computes the remaining timeout available
-        try:
-            self.socket		= socket.create_connection( (self.host, self.port),
-                                    timeout=timeout, source_address=getattr( self, 'source_address', None ))
-        except socket.error as exc:
-            log.debug('Connection to (%s, %s) failed: %s' % (
-                self.host, self.port, exc ))
-            self.close()
-        finally:
-            log.debug( "Connect completed in %.3fs" % ( cpppo.timer() - begun ))
-
-        return self.socket != None
-
-    def _recv( self, size ):
-        """On a receive timeout, closes the socket and raises a ConnectionException.  Otherwise,
-        returns the available input"""
-        if not self.socket:
-            raise ConnectionException( self.__str__() )
-        begun			= cpppo.timer()
-        timeout			= self.timeout # This computes the remaining timeout available
-        log.debug( "Receive begins  in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-        r,w,e			= select.select( [self.socket], [], [], timeout )
-        if r:
-            log.debug( "Receive reading in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-            result		= super( modbus_client_timeout, self )._recv( size )
-            log.debug( "Receive success in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-            return result
-
-        self.close()
-        log.debug( "Receive failure in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-        raise ConnectionException("Receive from (%s, %s) failed: Timeout" % (
-                getattr( self, 'host', '(serial)' ), self.port ))
-
-    def __repr__( self ):
-        return "<%s: %s>" % ( self, self.socket.__repr__() if self.socket else "closed" )
-
-
-class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
-
-    def connect( self ):
-        """Reconnect to the serial port, if we've been disconnected (eg. due to poll failure).  Since the
-        connect will either immediately succeed or fail, we won't bother implementing a timeout.
-
-        """
-        if self.socket: return True
-        log.debug( "Connecting to (%s, %s)", getattr( self, 'host', '(serial)' ), self.port )
-        connected		= super( modbus_client_rtu, self ).connect()
-        log.debug( "%r: inter-char timeout: %s", self,
-                   self.socket.getInterCharTimeout() if self.socket else None )
-        return connected
-
-    def _recv( self, size ):
-        """Replicate the approximate semantics of a socket recv; return what's available.  However,
-        don't return Nothing (indicating an EOF).  So, wait for up to remaining 'self.timeout'
-        for something to show up, but return immediately with whatever is there.
-
-        We'll do it simply -- just read one at a time from the serial port.  We could find out how
-        many bytes are available using the TIOCINQ ioctl, but this won't work on non-Posix systems.
-        We can't just use the built-in Serial's read method and adjust its own _timeout to reflect
-        our own remaining timeout -- we must only block 'til we have at least one character, and
-        then continue reading 'til no more input is immediately available; there is no way to invoke
-        Serial.read to indicate that.
-
-        """
-        if not self.socket:
-            raise ConnectionException( self.__str__() )
-        begun			= cpppo.timer()
-        timeout			= self.timeout # This computes the remaining timeout available
-        log.debug( "Receive begins  in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-        
-        read			= bytearray()
-        remains			= timeout
-        r,w,e			= select.select( [self.socket.fd], [], [], timeout )
-        while r and len( read ) < size:
-            # Still readable, and size not yet satisfied; get the next one
-            buf			= os.read( self.socket.fd, 1 )
-            if not buf:
-                break # reports readable, but nothing there...  Disconnected hardware?  Report later.
-            read.extend( buf )
-            log.debug( "Receive reading in %7.3f/%7.3fs; %d bytes", cpppo.timer() - begun, timeout,
-                       len( read ))
-            r,w,e		= select.select( [self.socket.fd], [], [], 0 ) # Something read! No more waiting
-
-        if len( read ):
-            log.debug( "Receive success in %7.3f/%7.3fs; %d bytes", cpppo.timer() - begun, timeout,
-                       len( read ))
-            return bytes( read )
-
-        # Nothing within timeout; potential client failure, disconnected hardware.  Force a re-open
-        self.close()
-        log.debug( "Receive failure in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-        raise ConnectionException("Receive from (%s, %s) failed: Timeout" % (
-                getattr( self, 'host', '(serial)' ), self.port ))
-        
 
 def shatter( address, count, limit=None ):
     """ Yields (address, count) ranges of length 'limit' sufficient to cover the

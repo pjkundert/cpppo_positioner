@@ -59,7 +59,8 @@ try:
     from pymodbus.constants import Defaults
     from pymodbus.exceptions import ModbusException
     from pymodbus.client.sync import ModbusTcpClient, ModbusSerialClient
-    from remote.plc_modbus import poller_modbus, modbus_client_tcp, modbus_client_rtu, merge, shatter, ModbusTcpServerActions
+    from remote.plc_modbus import poller_modbus, merge, shatter
+    from remote.pymodbus_fixes import modbus_client_tcp, modbus_client_rtu, modbus_server_tcp
     has_pymodbus		= True
 except Exception as exc:
     logging.warning( "Failed to import pymodbus module; skipping Modbus/TCP related tests; run 'pip install pymodbus'; %s",
@@ -92,7 +93,7 @@ def test_pymodbus_service_actions():
         return
     address			= ("localhost", 11502)
 
-    class modbus_actions( ModbusTcpServerActions ):
+    class modbus_actions( modbus_server_tcp ):
 
         counter			= 0
 
@@ -110,12 +111,12 @@ def test_pymodbus_service_actions():
                 "Unexpected socket error; only address in use allowed: %s" % exc
             address		= (address[0],address[1]+1)
         except Exception as exc:
-            log.warning( "Failed to start ModbusTcpServerActions on %r: %s; %s",
+            log.warning( "Failed to start modbus_actions on %r: %s; %s",
                         address, exc, traceback.format_exc() )
             break
 
-    assert server is not None, "Couldn't start ModbusTcpServerActions"
-    log.normal( "Success starting ModbusTcpServerActions on %r", address )
+    assert server is not None, "Couldn't start modbus_actions"
+    log.normal( "Success starting modbus_actions on %r", address )
 
     def modbus_killer():
         log.detail( "killer started" )
@@ -128,7 +129,7 @@ def test_pymodbus_service_actions():
         killer.start()
 
         server.serve_forever( poll_interval=0.5 )
-        assert 3 <= server.counter <= 5, "ModbusTcpServerActions.service_actions not triggered ~4 times"
+        assert 3 <= server.counter <= 5, "modbus_actions.service_actions not triggered ~4 times"
     finally:
         killer.join()
 
