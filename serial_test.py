@@ -20,8 +20,12 @@ from remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collectin
 from remote.plc_modbus import poller_modbus
 from pymodbus.constants import Defaults
 
-logging.basicConfig( level=logging.DEBUG, datefmt='%m-%d %H:%M:%S',
-        format='%(asctime)s.%(msecs).03d %(thread)16x %(name)-8.8s %(levelname)-8.8s %(funcName)-10.10s %(message)s' )
+logging.basicConfig(
+    #level=logging.WARNING,
+    level=logging.DETAIL,
+    #level=logging.DEBUG,
+    datefmt='%m-%d %H:%M:%S',
+    format='%(asctime)s.%(msecs).03d %(thread)16x %(name)-8.8s %(levelname)-8.8s %(funcName)-10.10s %(message)s' )
 
 PORT_MASTER			= "/dev/ttyS1"
 PORT_SLAVE			= "/dev/ttyS0"
@@ -29,7 +33,7 @@ PORT_SLAVE			= "/dev/ttyS0"
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
-PORT_BAUDRATE			= 4800 # 115200
+PORT_BAUDRATE			= 115200
 PORT_TIMEOUT			= 1.5
 
 # Configure minimalmodbus to use the specified port serial framing

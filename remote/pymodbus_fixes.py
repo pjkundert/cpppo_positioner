@@ -51,7 +51,8 @@ from pymodbus.constants import Defaults
 from pymodbus.client.sync import ModbusTcpClient, ModbusSerialClient
 from pymodbus.factory import ClientDecoder
 from pymodbus.exceptions import *
-from pymodbus.pdu import (ExceptionResponse, ModbusResponse)
+from pymodbus.pdu import ExceptionResponse, ModbusResponse
+from pymodbus.utilities import checkCRC
 
 
 class modbus_rtu_framer_collecting( ModbusRtuFramer ):
@@ -101,7 +102,7 @@ class modbus_rtu_framer_collecting( ModbusRtuFramer ):
     inter-message timeout works reliably.  We simply cannot depend on user-level
     timeouts to detect the end of an RS-485 Modbus/RTS frame!
 
-    We have to detect it statistically.
+    We might have to detect it statistically.
 
     After each group of UART input is received immediately when available (with
     *no* inter-character timeout at all), we will attempt to detect a frame.  If
@@ -128,40 +129,26 @@ class modbus_rtu_framer_collecting( ModbusRtuFramer ):
     frame.  When one is found, throw out the leading characters (they are noise,
     or an old, corrupted frame), and return the valid frame!
 
+
+    The fatal issue with statistically trying to frame data, is that there are
+    now "forbidden" sequences of data that cannot be used on links of certain
+    speeds (eg. where timing will cause the reception of the frame to be broken
+    into multiple segments).  This is an impossible situation; the statistical
+    approach is a non-starter; we *must* ensure that the complete frame is
+    received.  Furthermore, at a higher level (in ModbusTransactionManager's
+    .execute), no provision is made for incomplete framing; each frame gets one
+    .client._recv, and one .framer.processIncomingPacket.  This would (should?)
+    be modified to compute the incoming frame size, and continue reception 'til
+    at least the entire frame is received (and validated/rejected) or a timeout
+    occurs -- but neither of these details are available to the
+    ModbusTransactionManager.
+
+
+    Therefore, the approach we will take is to ensure that we allow a certain
+    amount of time (dependent on the baudrate) for the incoming packet to
+    complete.
+
     """
-    def processIncomingPacket(self, data, callback):
-        '''Exactly like the base-class ModbusRtuFramer, except we just break out if no
-        frame is found.  We could have hacked a way to pop out via
-        .isFrameReady() returning False just after a .resetFrame() but that
-        would be very subtle...
-
-        '''
-        self.addToFrame(data)
-        while self.isFrameReady():
-            if self.checkFrame():
-                result = self.decoder.decode(self.getFrame())
-                if result is None:
-                    raise ModbusIOException("Unable to decode response")
-                self.populateResult(result)
-                self.advanceFrame()
-                callback(result)  # defer or push to a thread?
-            else: break
-
-    def checkFrame( self ):
-        saved			= self._ModbusRtuFramer__buffer
-        try:
-            for start in range( 0, max( 1, len( saved ) - 4 )):
-                self._ModbusRtuFramer__buffer = saved[start:]
-                if super( modbus_rtu_framer_collecting, self ).checkFrame():
-                    # Found a frame!  Update saved if we had to advance due to noise
-                    logging.info( "Found valid frame at %d/%d bytes", start, len( saved ))
-                    if start:
-                        saved	= saved[start:]
-                    return True
-        finally:
-            # Restore base-class .__buffer to original/updated 'saved' on *all* exits
-            self._ModbusRtuFramer__buffer = saved
-        return False
 
 
 class modbus_server_tcp( ModbusTcpServer ):
@@ -202,32 +189,82 @@ class modbus_server_tcp( ModbusTcpServer ):
         pass
 
 
+def modbus_rtu_read( fd, decoder, size=1024, timeout=None ):
+    """An fd select.select/os.read loop understands Modbus/RTU protocol, and receives all the data
+    available up to the end of the first recognized Modbus/RTU request/reply.  A pymodbus.factory
+    ClientDecoder or ServerDecoder must be supplied, in order to recognize the allowed RTU
+    requests/replies and compute their sizes.
+
+    """
+    incoming			= b''
+    begun			= cpppo.timer()
+    logging.debug( "Modbus/RTU %s Receive begins  in %7.3f/%7.3fs", decoder.__class__.__name__,
+                   cpppo.timer() - begun, timeout if timeout is not None else cpppo.inf )
+    complete			= False
+    rejected			= 1 # known *not* to be a valid request <function code> ... <crc>
+    # Wait up to 'timeout' for an initial request character, then 1/10th second.
+    while ( len( incoming ) < size 
+            and not complete
+            and select.select( [fd], [], [], 1.0/10 if incoming else timeout )[0] ):
+        # Not yet satisfied, and frame not yet complete, and still readable; get the next one.  If
+        # no input is availabe within 1.5 character times, we should quit; we cannot be anywhere
+        # near that precise at the "user" level (probably not even at the device driver level; must
+        # be implemented in the RS485-capable UART), so wait a long time (adequate for any UART
+        # input available to trickle thru the kernel to the serial input buffer and be reported as
+        # ready to receive).  Since we don't know baudrate or kernel loading, we must use an
+        # extraordinarily long timeout (1/10th) second.  Unfortunately, this is roughly equivalent
+        # to opening the serial port with VMIN=0 and VTIME=1 -- but, astonishingly, there is no way
+        # to do that via PySerial!
+        c			= os.read( fd, 1 )
+        if not c:
+            raise SerialException('device reports readiness to read but returned no data (device disconnected or multiple access on port?)')
+        incoming	       += c
+        logging.debug( "Modbus/RTU %s Receive reading in %7.3f/%7.3fs; %d bytes", decoder.__class__.__name__,
+                       cpppo.timer() - begun, timeout if timeout is not None else cpppo.inf,
+                       len( incoming ))
+        for i in range( rejected, max( rejected, len( incoming ) - 2 )):
+            # in a buffer N long, the function code could be anywhere from index 1, to within 3
+            # characters from the end: <unit> <func_code> [<data> ...] <crc0> <crc1>.  See if we can
+            # reject any more input as definitely *not* a potentially valid request in formation.
+            # If its a recognized function code, and we have the complete request data, and its CRC
+            # is invalid, reject it and move along.  However, if we cannot yet tell (because we
+            # don't yet have a CRC), keep receiving.  For actual ExceptionResponse, we'll just
+            # timeout and return what we get (because we can't identify those reliably)
+            pdu_class		= decoder.lookupPduClass( ord( incoming[i] ))
+            if pdu_class is ExceptionResponse: # Returned for every unrecognized function...
+                rejected	= i
+                logging.debug( "Modbus/RTU %s Receive rejects in %7.3f/%7.3fs; %d bytes: no frame at offset %d", decoder.__class__.__name__,
+                               cpppo.timer() - begun, timeout if timeout is not None else cpppo.inf,
+                               len( incoming ), rejected )
+                continue
+            # Might be a function code!  How big?  Raises Exception if data not yet available.
+            try:
+                frame_size	= pdu_class.calculateRtuFrameSize( incoming[i-1:] )
+                data		= incoming[i-1:i-1+frame_size-2]
+                crc		= incoming[i-1+frame_size-2:i-1+frame_size]
+                crc_val		= (ord(crc[0]) << 8) + ord(crc[1])
+                if checkCRC( data, crc_val ):
+                    logging.debug( "Modbus/RTU %s Receive framing in %7.3f/%7.3fs; %d bytes: %s of %d bytes", decoder.__class__.__name__,
+                       cpppo.timer() - begun, timeout if timeout is not None else cpppo.inf,
+                       len( incoming ), pdu_class.__name__, frame_size )
+                    complete	= True
+                    break
+            except Exception as exc:
+                # Not yet possible to tell; keep receiving
+                break
+
+    logging.debug( "Modbus/RTU %s Receive success in %7.3f/%7.3fs; %d bytes", decoder.__class__.__name__,
+                   cpppo.timer() - begun, timeout if timeout is not None else cpppo.inf,
+                   len( incoming ))
+    return incoming
+
+
 class modbus_server_rtu( ModbusSerialServer ):
     def _build_handler( self ):
-
-        def recv( size=1024 ):
-            begun		= time.time()
-            logging.debug( "Receive begins  in %7.3f/%7.3fs", time.time() - begun, self.socket._timeout )
-            read		= bytearray()
-            r,w,e		= select.select( [self.socket.fd], [], [], self.socket._timeout )
-            while r and len( read ) < size:
-                # Still readable, and size not yet satisfied; get the next one
-                buf		= os.read( self.socket.fd, 1 )
-                if not buf:
-                    raise SerialException('device reports readiness to read but returned no data (device disconnected or multiple access on port?)')
-                read.extend( buf )
-                logging.debug( "Receive reading in %7.3f/%7.3fs; %d bytes", time.time() - begun,
-                               self.socket._timeout, len( read ))
-                # Something has been read!  No more waiting
-                r,w,e		= select.select( [self.socket.fd], [], [], 0 )
-    
-            logging.debug( "Receive success in %7.3f/%7.3fs; %d bytes", time.time() - begun,
-                           self.socket._timeout, len( read ))
-            return bytes( read )
-
         request			= self.socket
         request.send		= request.write
-        request.recv		= recv
+        request.recv		= lambda s: modbus_rtu_read(
+            fd=self.socket.fd, decoder=self.decoder, timeout=self.socket._timeout )
         handler			= ModbusSingleRequestHandler( request, (self.device, self.device), self )
         return handler
 
@@ -299,7 +336,7 @@ class modbus_client_timeout( object ):
 
 
 class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
-
+    """A ModbusTcpClient with transaction timeouts."""
     def connect(self):
         """Duplicate the functionality of connect (handling optional .source_address attribute added
         in pymodbus 1.2.0), but pass the computed remaining timeout.
@@ -323,7 +360,7 @@ class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
 
     def _recv( self, size ):
         """On a receive timeout, closes the socket and raises a ConnectionException.  Otherwise,
-        returns the available input"""
+        returns the available input."""
         if not self.socket:
             raise ConnectionException( self.__str__() )
         begun			= cpppo.timer()
@@ -346,10 +383,8 @@ class modbus_client_tcp( modbus_client_timeout, ModbusTcpClient ):
 
 
 class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
-    """Implement semantically correct serial recv.
-
-    TODO: force use of modbus_rtu_framer_collecting for method='rtu', while
-    trying to retain the original (broken) 'method="..."' framer selection.
+    """A ModbusSerialClient wiht timeoust, and semantically correct serial recv, returning up to the
+    first detected Modbus/RTU client request or inter-message timeout.
 
     """
     def __init__( self, method='ascii', framer=None,  **kwargs ):
@@ -375,7 +410,6 @@ class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
             self.method		= framer.__name__
             self.framer		= framer( ClientDecoder() )
             logging.debug( "Fixing ModbusSerialClient framer: %s",  self.method )
-        
 
     def connect( self ):
         """Reconnect to the serial port, if we've been disconnected (eg. due to poll failure).  Since the
@@ -405,30 +439,18 @@ class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
         if not self.socket:
             raise ConnectionException( self.__str__() )
         begun			= cpppo.timer()
-        timeout			= self.timeout # This computes the remaining timeout available
-        logging.debug( "Receive begins  in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
-        
-        read			= bytearray()
-        remains			= timeout
-        r,w,e			= select.select( [self.socket.fd], [], [], timeout )
-        while r and len( read ) < size:
-            # Still readable, and size not yet satisfied; get the next one
-            buf			= os.read( self.socket.fd, 1 )
-            if not buf:
-                break # reports readable, but nothing there...  Disconnected hardware?  Report later.
-            read.extend( buf )
-            logging.debug( "Receive reading in %7.3f/%7.3fs; %d bytes", cpppo.timer() - begun, timeout,
-                       len( read ))
-            r,w,e		= select.select( [self.socket.fd], [], [], 0 ) # Something read! No more waiting
+        request			= None
+        try:
+            request		= modbus_rtu_read( fd=self.socket.fd, decoder=self.framer.decoder,
+                                                   size=size, timeout=self.timeout )
+        except Exception as exc:
+            logging.warning( "Receive Exception %s; %s", exc, traceback.format_exc() )
 
-        if len( read ):
-            logging.debug( "Receive success in %7.3f/%7.3fs; %d bytes", cpppo.timer() - begun, timeout,
-                       len( read ))
-            return bytes( read )
+        if request:
+            return request
 
-        # Nothing within timeout; potential client failure, disconnected hardware.  Force a re-open
+        # Nothing within timeout; potential client failure, disconnected hardware?  Force a re-open
         self.close()
-        logging.debug( "Receive failure in %7.3f/%7.3fs", cpppo.timer() - begun, timeout )
+        logging.debug( "Receive failure in %7.3f/%7.3fs", cpppo.timer() - begun, self.timeout )
         raise ConnectionException("Receive from (%s, %s) failed: Timeout" % (
-                getattr( self, 'host', '(serial)' ), self.port ))
-        
+            getattr( self, 'host', '(serial)' ), self.port ))
