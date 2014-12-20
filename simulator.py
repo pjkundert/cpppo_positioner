@@ -1,6 +1,6 @@
 
 # 
-# Cpppo_positioner -- Actuator position control via EtherNet/IP
+# Cpppo_positioner -- Actuator position control
 # 
 # Copyright (c) 2014, Hard Consulting Corporation.
 # 

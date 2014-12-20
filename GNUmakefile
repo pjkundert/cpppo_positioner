@@ -81,11 +81,11 @@ clean:
 # Run only tests with a prefix containing the target string, eg test-blah
 test-%:
 	$(PY2TEST) *$*_test.py
-	$(PY3TEST) *$*_test.py
+#	$(PY3TEST) *$*_test.py
 
 unit-%:
 	$(PY2TEST) -k $*
-	$(PY3TEST) -k $*
+#	$(PY3TEST) -k $*
 
 
 #

@@ -16,11 +16,16 @@ import traceback
 
 
 import cpppo
-from remote.plc_modbus import poller_modbus, modbus_client_rtu
+from remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
+from remote.plc_modbus import poller_modbus
 from pymodbus.constants import Defaults
 
-logging.basicConfig( level=logging.DEBUG, datefmt='%m-%d %H:%M:%S',
-        format='%(asctime)s.%(msecs).03d %(thread)16x %(name)-8.8s %(levelname)-8.8s %(funcName)-10.10s %(message)s' )
+logging.basicConfig(
+    #level=logging.WARNING,
+    level=logging.DETAIL,
+    #level=logging.DEBUG,
+    datefmt='%m-%d %H:%M:%S',
+    format='%(asctime)s.%(msecs).03d %(thread)16x %(name)-8.8s %(levelname)-8.8s %(funcName)-10.10s %(message)s' )
 
 PORT_MASTER			= "/dev/ttyS1"
 PORT_SLAVE			= "/dev/ttyS0"
@@ -216,7 +221,7 @@ def test_rs485_poll( simulated_modbus_rtu ):
 
     command,address		= simulated_modbus_rtu
     Defaults.Timeout		= PORT_TIMEOUT
-    client			= modbus_client_rtu( method='rtu',
+    client			= modbus_client_rtu( framer=modbus_rtu_framer_collecting,
         port=PORT_MASTER, stopbits=PORT_STOPBITS, bytesize=PORT_BYTESIZE,
         parity=PORT_PARITY, baudrate=PORT_BAUDRATE )
 
