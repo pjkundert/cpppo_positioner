@@ -148,8 +148,26 @@ class modbus_rtu_framer_collecting( ModbusRtuFramer ):
     amount of time (dependent on the baudrate) for the incoming packet to
     complete.
 
-    """
+    Also, since the (slave) will be seeing replies from other slaves, and will be receiving frames
+    with those replies immediately followed by requests, we must seek in the buffer 'til we see a
+    request.
 
+    """
+    def checkFrame( self ):
+        saved			= self._ModbusRtuFramer__buffer
+        try:
+            for start in range( 0, max ( 1, len( saved) - 4 )):
+                self._ModbusRtuFramer__buffer = saved[start:]
+                if super( modbus_rtu_framer_collecting, self ).checkFrame():
+                    # Found a frame!  Update saved if we had to advance due to noise
+                    logging.info( "Found valid frame at %d/%d bytes", start, len( saved ))
+                    if start:
+                        saved	= saved[start:]
+                    return True
+        finally:
+            # Restore base-class .__buffer to original/updated 'saved' on *all* exits
+            self._ModbusRtuFramer__buffer = saved
+        return False
 
 class modbus_server_tcp( ModbusTcpServer ):
     """Augments the stock pymodbus ModbusTcpServer with the Python3 'socketserver'
@@ -328,9 +346,11 @@ class modbus_client_timeout( object ):
 
     def __enter__( self ):
         self._lock.acquire( True )
+        logging.debug( "Acquired lock on %r", self )
         return self
 
     def __exit__( self, typ, val, tbk ):
+        logging.debug( "Release  lock on %r", self )
         self._lock.release()
         return False
 
