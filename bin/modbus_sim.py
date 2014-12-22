@@ -249,10 +249,13 @@ def registers_context( registers, slaves=None ):
             val 			= val[:end - beg + 1]
             log.info( "%05d-%05d = %s", beg, end, reprlib.repr( val ))
             for reg in xrange( beg, end + 1 ):
-                dct, off 	= (     ( hrd, 40001 ) if reg >= 40001
-                                   else ( ird, 30001 ) if reg >= 30001
-                                   else ( did, 10001 ) if reg >= 10001
-                                   else ( cod,     1 ))
+                dct, off 	= (     ( hrd, 400001 ) if reg >= 400001
+                                   else ( ird, 300001 ) if reg >= 300001
+                                   else ( did, 100001 ) if reg >= 100001
+                                   else ( hrd,  40001 ) if reg >= 40001
+                                   else ( ird,  30001 ) if reg >= 30001
+                                   else ( did,  10001 ) if reg >= 10001
+                                   else ( cod,      1 ))
                 dct[reg - off] 	= val[reg - beg]
         except Exception as exc:
             log.error( "Unrecognized registers '%s': %s", txt, str( exc ))

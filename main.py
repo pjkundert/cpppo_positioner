@@ -48,9 +48,9 @@ import traceback
 
 import cpppo
 
-# The default address to connect to.  Obviously, 'localhost' is unlikely to be the target actuator
-# gateway (except under test scenarios), but 44818 is the standard EtherNet/IP port.
-address				= ('localhost',44818)
+# The default address to connect to.  For serial-connected devices, probably a
+# serial port like /dev/ttyS1.
+address				= '/dev/ttyS1'
 
 
 # Signal Handling
@@ -170,8 +170,8 @@ def main( argv=None, idle_service=None, **kwds ):
                      help="Gateway module.class configuration JSON (default: None)" )
     ap.add_argument( '-v', '--verbose', default=0, action="count",
                      help="Display logging information." )
-    ap.add_argument( '-a', '--address', default=( "%s:%d" % address ),
-                     help="EtherNet/IP interface[:port] of actuator gateway to connect to (default: %s:%d)" % address )
+    ap.add_argument( '-a', '--address', default=address,
+                     help="Address of actuator gateway to connect to (default: %s)" % ( address ))
     ap.add_argument( '-l', '--log',
                      help="Log file, if desired" )
     ap.add_argument( '-t', '--timeout', default=5,
@@ -181,12 +181,6 @@ def main( argv=None, idle_service=None, **kwds ):
                      help="Any JSON position dictionaries, or numeric delays (in seconds)")
 
     args			= ap.parse_args( argv )
-
-    # Deduce interface:port address to connect, and correct types (default is address, above)
-    conn			= args.address.split(':')
-    assert 1 <= len( conn ) <= 2, "Invalid --address [<interface>]:[<port>}: %s" % args.address
-    conn			= ( str( conn[0] ) if conn[0] else address[0],
-                                    int( conn[1] ) if len( conn ) > 1 and conn[1] else address[1] )
 
     # Set up logging level (-v...) and --log <file>
     cpppo.log_cfg['level']	= ( logging_levelmap[args.verbose] 
@@ -274,7 +268,7 @@ def main( argv=None, idle_service=None, **kwds ):
             time.sleep( dat )
             continue
         if not isinstance( dat, dict ):
-            logging.warning( "Unknown position type: %s: %r", type(dat), dat )
+            logging.warning( "Unknown position type: %s: %r", type( dat ), dat )
             continue
 
         # A position dict in 'dat'; attempt to position to it.  We'll wait forever to establish a
@@ -284,11 +278,10 @@ def main( argv=None, idle_service=None, **kwds ):
         while success < count:
             if not gateway:
                 try:
-                    gateway	= gateway_class( config=gateway_config.copy(),
-                                                 host=conn[0], port=conn[1], timeout=args.timeout )
-                    logging.normal( "Gateway:  %s:%d connected", conn[0], conn[1] )
+                    gateway	= gateway_class( address=args.address, timeout=args.timeout, **gateway_config )
+                    logging.normal( "Gateway:  %s connected", address )
                 except Exception as exc:
-                    logging.warning("Gateway:  %s:%d connection failed: %s; %s", conn[0], conn[1],
+                    logging.warning("Gateway:  %s connection failed: %s; %s", address,
                                     exc, traceback.format_exc() if gateway is None else "" )
                     gateway	= False
                     time.sleep( 1 ) # avoid tight loop on connection failures
