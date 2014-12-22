@@ -53,6 +53,21 @@ from pymodbus.factory import ClientDecoder
 from pymodbus.exceptions import *
 from pymodbus.pdu import ExceptionResponse, ModbusResponse
 from pymodbus.utilities import checkCRC
+from pymodbus.datastore.store import ModbusSparseDataBlock
+
+class modbus_sparse_data_block( ModbusSparseDataBlock ):
+    """Implement a ModbusSparseDataBlock that isn't spectacularly inefficient, and also correctly
+    deduces the lowest address.
+
+    """
+    def __init__( self, values ):
+        super( modbus_sparse_data_block, self ).__init__( values )
+        self.address		= min( self.values )
+
+    def validate( self, address, count=1 ):
+        logging.debug( "checking %5d-%5d", address, address + count - 1 )
+        if count == 0: return False
+        return all( r in self.values for r in range( address, address + count ))
 
 
 class modbus_rtu_framer_collecting( ModbusRtuFramer ):
@@ -429,7 +444,6 @@ class modbus_client_rtu( modbus_client_timeout, ModbusSerialClient ):
             assert not isinstance( framer, ModbusSocketFramer )
             self.method		= framer.__name__
             self.framer		= framer( ClientDecoder() )
-            logging.debug( "Fixing ModbusSerialClient framer: %s",  self.method )
 
     def connect( self ):
         """Reconnect to the serial port, if we've been disconnected (eg. due to poll failure).  Since the

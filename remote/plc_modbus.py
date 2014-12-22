@@ -97,7 +97,7 @@ def merge( ranges, reach=1, limit=None ):
             # We've been building a (base, length) merge range, but this
             # (address, count) doesn't merge; yield what we have
             for r in shatter( base, length, limit=limit ):
-                log.debug( "Emitting: %10r==>%10r" % ((base,length), r ))
+                log.debug( "Emitting: %10r==>%10r w/limit %r" % ((base,length), r, limit ))
                 yield r
         # ... and, continue from this new range
         base, length	= address, count
@@ -205,7 +205,7 @@ class poller_modbus( poller, threading.Thread ):
                             log.detail( "Polling: PLC %s %6d-%-6d (%5d)", self.description,
                                         address, address+count-1, count )
                         succ.add( (address, count) )
-                        self._store( address, value ) # Handle scalar or list/tuple value(s)
+                        self._store( address, value, create=False ) # Handle scalar or list/tuple value(s)
                     except ModbusException as exc:
                         # Modbus error; Couldn't read the given range.  Only log
                         # the first time failure to poll this range is detected
@@ -324,27 +324,28 @@ class poller_modbus( poller, threading.Thread ):
 
         # Use address to deduce Holding/Input Register or Coil/Status.
         reader			= None
+        xformed			= address
         if 400001 <= address <= 465536:
             reader		= ReadHoldingRegisterRequest
-            address    	       -= 400001
+            xformed	       -= 400001
         elif 300001 <= address <= 365536:
             reader		= ReadInputRegisterRequest
-            address    	       -= 300001
+            xformed    	       -= 300001
         elif 100001 <= address <= 165536:
             reader		= ReadDiscreteInputsRequest
-            address    	       -= 100001
+            xformed    	       -= 100001
         elif 40001 <= address <= 99999:
             reader		= ReadHoldingRegistersRequest
-            address    	       -= 40001
+            xformed    	       -= 40001
         elif 30001 <= address <= 39999:
             reader		= ReadInputRegisterRequest
-            address    	       -= 30001
+            xformed    	       -= 30001
         elif 10001 <= address <= 19999:
             reader		= ReadDiscreteInputsRequest
-            address    	       -= 10001
+            xformed    	       -= 10001
         elif 1 <= address <= 9999:
             reader		= ReadCoilsRequest
-            address	       -= 1
+            xformed	       -= 1
         else:
             # Invalid address
             pass
@@ -352,7 +353,11 @@ class poller_modbus( poller, threading.Thread ):
             raise ParameterException( "Invalid Modbus address for read: %d" % ( address ))
 
         unit			= kwargs.pop( 'unit', self.unit )
-        result 			= self.client.execute( reader( address, count, unit=unit, **kwargs ))
+        request			= reader( xformed, count, unit=unit, **kwargs )
+        log.debug( "%s/%6d-%6d transformed to %s", self.description, address, address + count - 1,
+                   request )
+
+        result 			= self.client.execute( request )
         if isinstance( result, ExceptionResponse ):
             # The remote PLC returned a response indicating it encountered an
             # error processing the request.  Convert it to raise a ModbusException.

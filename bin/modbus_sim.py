@@ -102,7 +102,6 @@ from pymodbus.register_write_message import WriteSingleRegisterResponse, WriteMu
 from pymodbus.transaction import ModbusSocketFramer
 from pymodbus import constants
 
-print( "__name__: %s, __package__: %s, __file__: %s" % ( __name__, __package__, __file__ ))
 if __name__ == "__main__" and __package__ is None:
     # Ensure that importing works (whether cpppo_positioner installed or not) with:
     #   python -m cpppo_positioner.bin.modbus_sim ...
@@ -116,9 +115,17 @@ if __name__ == "__main__" and __package__ is None:
         sys.path.append( os.path.dirname( os.path.dirname( os.path.dirname( os.path.abspath( __file__ )))))
         
 from cpppo_positioner.remote.pymodbus_fixes import (
+    modbus_sparse_data_block,
     modbus_server_rtu, modbus_rtu_framer_collecting,
     modbus_server_tcp )
 
+
+# Correct an invalid default; ensure our *ModbusDataStore always correctly bases
+# requests from 0 (the human-readable addresses, eg. 1, 10001, 40001) have been
+# parsed and converted to zero-based addresses by the client, before the request
+# is sent).
+
+Defaults.ZeroMode		= True
 
 #---------------------------------------------------------------------------# 
 # configure the service logging
@@ -246,9 +253,9 @@ def registers_context( registers, slaves=None ):
                 end 		= beg + len( val ) - 1
             if len( val ) < end - beg + 1:
                 val 	       *= (( end - beg + 1 ) // len( val ) + 1 )
-            val 			= val[:end - beg + 1]
+            val 		= val[:end - beg + 1]
             log.info( "%05d-%05d = %s", beg, end, reprlib.repr( val ))
-            for reg in xrange( beg, end + 1 ):
+            for reg in range( beg, end + 1 ):
                 dct, off 	= (     ( hrd, 400001 ) if reg >= 400001
                                    else ( ird, 300001 ) if reg >= 300001
                                    else ( did, 100001 ) if reg >= 100001
@@ -260,15 +267,19 @@ def registers_context( registers, slaves=None ):
         except Exception as exc:
             log.error( "Unrecognized registers '%s': %s", txt, str( exc ))
             raise
-        log.info( "Holding Registers: %s", reprlib.repr( hrd ))
-        log.info( "Input   Registers: %s", reprlib.repr( ird ))
-        log.info( "Output  Coils:     %s", reprlib.repr( cod ))
-        log.info( "Discrete Inputs:   %s", reprlib.repr( did ))
+    log.info( "Holding Registers: %5d, %6d-%6d; %s", len( hrd ),
+              400001 + min( hrd ) if hrd else 0, 400001 + max( hrd ) if hrd else 0, reprlib.repr( hrd ))
+    log.info( "Input   Registers: %5d, %6d-%6d; %s", len( ird ),
+              300001 + min( ird ) if ird else 0, 300001 + max( ird ) if ird else 0, reprlib.repr( ird ))
+    log.info( "Output  Coils:     %5d, %6d-%6d; %s", len( cod ),
+                   1 + min( cod ) if cod else 0,      1 + max( cod ) if cod else 0, reprlib.repr( cod ))
+    log.info( "Discrete Inputs:   %5d, %6d-%6d; %s", len( did ),
+              100001 + min( did ) if did else 0, 100001 + max( did ) if did else 0, reprlib.repr( did ))
     store = ModbusSlaveContext(
-        di = ModbusSparseDataBlock( did ) if did else None,
-        co = ModbusSparseDataBlock( cod ) if cod else None,
-        hr = ModbusSparseDataBlock( hrd ) if hrd else None,
-        ir = ModbusSparseDataBlock( ird ) if ird else None )
+        di = modbus_sparse_data_block( did ) if did else None,
+        co = modbus_sparse_data_block( cod ) if cod else None,
+        hr = modbus_sparse_data_block( hrd ) if hrd else None,
+        ir = modbus_sparse_data_block( ird ) if ird else None )
 
     # If slaves is None, then just pass the store with single=True; it will be
     # used for every slave.  Otherwise, map all the specified slave IDs to the

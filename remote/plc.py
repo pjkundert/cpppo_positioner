@@ -84,9 +84,10 @@ class poller( object ):
         returning the latest known value, or None if offline. """
         self._poll( address )
         self._receive()
-        if not self.online:
-            return None
-        return self._data[address]
+        value			= self._data[address] if self.online else None
+        ( log.info if self.online else log.normal )( "%s/%6d %s> %s" % (
+                self.description, address, "-x" if not self.online else "--", reprlib.repr( value )))
+        return value
 
     def write( self, address, value, **kwargs ):
         """ Writes the value; if the PLC is online, logs at a relatively aggressive level."""
@@ -106,19 +107,26 @@ class poller( object ):
         store it locally. """
         self._store( address, value )
 
-    def _store( self, address, value ):
-        """ Remember data value(s) received; by default, just store it/them in
-        or _data table.  Any value stored while offline is lost (this will only
-        occur under simulated PLCs, of course)!  Logs at only high logging
-        levels, due to large amounts of output (eg. due to polling). """
-        log.detail( "%s/%6d %s> %s" % ( 
-                self.description, address, "-x" if not self.online else "--", reprlib.repr( value )))
+    def _store( self, address, value, create=True ):
+        """Remember data value(s) received; by default, just store it/them in or _data table.  Any value
+        stored while offline is lost (this will only occur under simulated PLCs, of course)!  Logs
+        at only high logging levels, due to large amounts of output (eg. due to polling).
+
+        If 'create' is False, we will not create entries new to store data; an entry must already
+        exist.  This is useful, for example, when reading bit data (Coils, Input Statuses), which
+        may return more data than you requested, causing an expansion in the subsequent polls.
+
+        """
+        log.detail( "%s/%6d %s> %s",
+                self.description, address, "-x" if not self.online else "--", reprlib.repr( value ))
         if self.online:
             if isinstance( value, (list,tuple) ):
-                for offset in xrange( len( value )):
-                    self._data[address+offset] = value[offset]
+                for offset in range( len( value )):
+                    if create or address+offset in self._data:
+                        self._data[address+offset] = value[offset]
             else:
-                self._data[address] = value
+                if create or address in self._data:
+                    self._data[address] = value
 
     def _receive( self ):
         """ Receive incoming data. """

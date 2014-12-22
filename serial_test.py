@@ -199,7 +199,7 @@ def test_rs485_basic( simulated_modbus_rtu_ttyS0 ):
 
     command,address		= simulated_modbus_rtu_ttyS0
 
-    comm			= minimalmodbus.Instrument( port=PORT_MASTER, slaveaddress=1 )
+    comm			= minimalmodbus.Instrument( port=PORT_MASTER, slaveaddress=2 )
     comm.debug			= True
     val				= comm.read_register( 1 )
     assert val == 0

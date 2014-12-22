@@ -39,7 +39,7 @@ PORT_MASTER			= '/dev/ttyS1'
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
-PORT_BAUDRATE			= 115200
+PORT_BAUDRATE			= 38400
 PORT_TIMEOUT			= 1.5
 
 POLL_RATE			= .25
@@ -62,17 +62,17 @@ data				= cpppo.dotdict()
 # Only valid when in serial driving mode.
 # (ON: 1, OFF: 0) 
 data.Y10_IN0			= {}
-data.Y10_IN0.addr		= 00000 + 0x10
+data.Y10_IN0.addr		= 00001 + 0x10 # == 17
 data.Y11_IN1			= {}
-data.Y11_IN1.addr		= 00000 + 0x11
+data.Y11_IN1.addr		= 00001 + 0x11
 data.Y12_IN2			= {}
-data.Y12_IN2.addr		= 00000 + 0x12
+data.Y12_IN2.addr		= 00001 + 0x12
 data.Y13_IN3			= {}
-data.Y13_IN3.addr		= 00000 + 0x13
+data.Y13_IN3.addr		= 00001 + 0x13
 data.Y14_IN4			= {}
-data.Y14_IN4.addr		= 00000 + 0x14
+data.Y14_IN4.addr		= 00001 + 0x14
 data.Y15_IN5			= {}
-data.Y15_IN5.addr		= 00000 + 0x15
+data.Y15_IN5.addr		= 00001 + 0x15
 
 # When Read
 # Displays the instruction state when in serial driving mode.
@@ -82,21 +82,21 @@ data.Y15_IN5.addr		= 00000 + 0x15
 # Only valid when in serial driving mode.
 # (ON: 1, OFF: 0)
 data.Y18_HOLD			= {}
-data.Y18_HOLD.addr		= 00000 + 0x18
+data.Y18_HOLD.addr		= 00001 + 0x18
 data.Y19_SVON			= {}
-data.Y19_SVON.addr		= 00000 + 0x19
+data.Y19_SVON.addr		= 00001 + 0x19
 data.Y1A_DRIVE			= {}
-data.Y1A_DRIVE.addr		= 00000 + 0x1a
+data.Y1A_DRIVE.addr		= 00001 + 0x1a
 data.Y1B_RESET			= {}
-data.Y1B_RESET.addr		= 00000 + 0x1b
+data.Y1B_RESET.addr		= 00001 + 0x1b
 data.Y1C_SETUP			= {}
-data.Y1C_SETUP.addr		= 00000 + 0x1c
+data.Y1C_SETUP.addr		= 00001 + 0x1c
 # Move to -'ve direction by JOG operation. (1: move, 2: stop) 
 data.Y1D_JOG_MINUS		= {}
-data.Y1D_JOG_MINUS.addr		= 00000 + 0x1d
+data.Y1D_JOG_MINUS.addr		= 00001 + 0x1d
 # Move to +'ve direction by JOG operation. (1: move, 2: stop) 
 data.Y1E_JOG_PLUS		= {}
-data.Y1E_JOG_PLUS.addr		= 00000 + 0x1e
+data.Y1E_JOG_PLUS.addr		= 00001 + 0x1e
 
 # The driving input mode (parallel/ serial) is switched in Y30.
 # 
@@ -107,7 +107,7 @@ data.Y1E_JOG_PLUS.addr		= 00000 + 0x1e
 # continued. Conversely, when Y30 is specified from 1 to 0, the state of the parallel input terminal
 # is reflected immediately.
 data.Y30_INPUT_INVALID		= {}
-data.Y30_INPUT_INVALID.addr	= 00000 + 0x30
+data.Y30_INPUT_INVALID.addr	= 00001 + 0x30 # == 49 (round up to 0x3f == 64)
 
 
 # X Discrete Inputs Internal Flags (status flags).  Read only.
@@ -115,7 +115,7 @@ data.Y30_INPUT_INVALID.addr	= 00000 + 0x30
 # As internal processing of controller (regardless of parallel/ serial), ON when the functions on
 # the left are output
 data.X40_OUT0			= {}
-data.X40_OUT0.addr		= 10001 + 0x40
+data.X40_OUT0.addr		= 10001 + 0x40 # == 10065
 data.X41_OUT1			= {}
 data.X41_OUT1.addr		= 10001 + 0x41
 data.X42_OUT2			= {}
@@ -147,12 +147,12 @@ data.X4D_WAREA.addr		= 10001 + 0x4d
 data.X4E_ESTOP			= {}
 data.X4E_ESTOP.addr		= 10001 + 0x4e
 data.X4F_ALARM			= {}
-data.X4F_ALARM.addr		= 10001 + 0x4f
+data.X4F_ALARM.addr		= 10001 + 0x4f # == 10080
 
 
 # D Holding Registers The state of the electrical actuator (current location, etc.)
 data.current_position		= {}		# 0.01mm
-data.current_position.addr	= 40001 + 0x9000
+data.current_position.addr	= 40001 + 0x9000# == 76865 or 436865
 data.current_position.format	= 'i'		# 32-bit signed integer
 data.current_speed		= {}		# 
 data.current_speed.addr		= 40001 + 0x9002
@@ -201,8 +201,8 @@ data.area_2			= {}		# +/-2147483647 0.01mm
 data.area_2.addr		= 40001 + 0x910e
 data.area_2.format		= 'i'
 data.in_position		= {}		# 1-2147483647 0.01mm
-data.in_position.addr		= 40001 + 0x9110
-data.in_position.format		= 'i'
+data.in_position.addr		= 40001 + 0x9110# == 77137 or 437137
+data.in_position.format		= 'i'		# == 77138 or 437138 (4 bytes, 2 words!)
 
 
 class smc_modbus( modbus_client_rtu ):
@@ -243,7 +243,7 @@ class smc_modbus( modbus_client_rtu ):
                 result[k]	= values[0]
                 continue
             # A 'struct' format; get all necessary values from subsequent addresses
-            assert addr >= 40001, "Must be a Holding Register address to support data format"
+            assert 40001 <= addr <= 100000 or 400001 <= addr, "Must be a Holding Register address to support data format"
             while 2 * len( values ) < struct.calcsize( format ):
                 addr	       += 1
                 values.append( actuator.read( addr ))
