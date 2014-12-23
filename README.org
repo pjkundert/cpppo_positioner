@@ -22,8 +22,16 @@
 ** Positioning
 
    A Python API is provided to implement positioning control.
-   : from import cpppo_positioner import smc
-   : gateway		= smc.smc_modbus()
+
+*** smc.smc_modbus
+    
+    The smc.smc_modbus class is the gateway for accessing multiple SMC
+    positioning actuators connected via RS-485 serial.  The serial port
+    parameters are =/dev/ttyS1=, 38400 Baud, 8 bits, 1 stop, no parity, and a
+    .25s poll rate.  These can all be specified as keyword arguments.   See
+    =cpppo_positioner/smc.py= for details.
+    : from cpppo_positioner import smc
+    : gateway		= smc.smc_modbus()
 
 *** .position -- Complete operation, Initiate new position
     
@@ -32,7 +40,6 @@
     If no new data is provided (eg. only =actuator= and/or =timeout= provided),
     then only the operation completion is checked; no new positioning operation
     is initiated.
-
     : gateway.position( actuator=1, timeout=10.0, position=12345, speed=100, ... )
     
     The full set of positioning parameters defined by the SMC actuator is:
@@ -61,59 +68,57 @@
     Returns the current complete set of status and data values for the actuator.
     If any value has not yet been polled, it will be =None=.  Here is an example
     (formatted for readability)
-
-   #+BEGIN_EXAMPLE
-   >>> gateway.status( actuator=1 )
-   {
-       "X40_OUT0": false,
-       "X41_OUT1": false,
-       "X42_OUT2": false,
-       "X43_OUT3": false,
-       "X44_OUT4": false,
-       "X45_OUT5": false,
-       "X48_BUSY": false,
-       "X49_SVRE": false,
-       "X4A_SETON": false,
-       "X4B_INP": false,
-       "X4C_AREA": false,
-       "X4D_WAREA": false,
-       "X4E_ESTOP": false,
-       "X4F_ALARM": false,
-       "Y10_IN0": false,
-       "Y11_IN1": false,
-       "Y12_IN2": false,
-       "Y13_IN3": false,
-       "Y14_IN4": false,
-       "Y15_IN5": false,
-       "Y18_HOLD": false,
-       "Y19_SVON": false,
-       "Y1A_DRIVE": false,
-       "Y1B_RESET": false,
-       "Y1C_SETUP": false,
-       "Y1D_JOG_MINUS": false,
-       "Y1E_JOG_PLUS": false,
-       "Y30_INPUT_INVALID": false,
-       "acceleration": 0,
-       "area_1": 0,
-       "area_2": 0,
-       "current_position": 0,
-       "current_speed": 0,
-       "current_thrust": 0,
-       "deceleration": 0,
-       "driving_data_no": 0,
-       "in_position": 0,
-       "movement_mode": 0,
-       "moving_force": 0,
-       "operation_start": 0,
-       "position": 0,
-       "pushing_force": 0,
-       "pushing_speed": 0,
-       "speed": 0,
-       "target_position": 0,
-       "trigger_level": 0
-   }
-   #+END_EXAMPLE
-
+    #+BEGIN_EXAMPLE
+    >>> gateway.status( actuator=1 )
+    {
+        "X40_OUT0": false,
+        "X41_OUT1": false,
+        "X42_OUT2": false,
+        "X43_OUT3": false,
+        "X44_OUT4": false,
+        "X45_OUT5": false,
+        "X48_BUSY": false,
+        "X49_SVRE": false,
+        "X4A_SETON": false,
+        "X4B_INP": false,
+        "X4C_AREA": false,
+        "X4D_WAREA": false,
+        "X4E_ESTOP": false,
+        "X4F_ALARM": false,
+        "Y10_IN0": false,
+        "Y11_IN1": false,
+        "Y12_IN2": false,
+        "Y13_IN3": false,
+        "Y14_IN4": false,
+        "Y15_IN5": false,
+        "Y18_HOLD": false,
+        "Y19_SVON": false,
+        "Y1A_DRIVE": false,
+        "Y1B_RESET": false,
+        "Y1C_SETUP": false,
+        "Y1D_JOG_MINUS": false,
+        "Y1E_JOG_PLUS": false,
+        "Y30_INPUT_INVALID": false,
+        "acceleration": 0,
+        "area_1": 0,
+        "area_2": 0,
+        "current_position": 0,
+        "current_speed": 0,
+        "current_thrust": 0,
+        "deceleration": 0,
+        "driving_data_no": 0,
+        "in_position": 0,
+        "movement_mode": 0,
+        "moving_force": 0,
+        "operation_start": 0,
+        "position": 0,
+        "pushing_force": 0,
+        "pushing_speed": 0,
+        "speed": 0,
+        "target_position": 0,
+        "trigger_level": 0
+    }
+    #+END_EXAMPLE
 
 *** Command- or Pipe-line usage
 
