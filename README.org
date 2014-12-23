@@ -23,17 +23,17 @@
 
    A Python API is provided to implement positioning control.
 
-*** smc.smc_modbus
+*** =smc.smc_modbus=
     
-    The smc.smc_modbus class is the gateway for accessing multiple SMC
-    positioning actuators connected via RS-485 serial.  The serial port
-    parameters are =/dev/ttyS1=, 38400 Baud, 8 bits, 1 stop, no parity, and a
-    .25s poll rate.  These can all be specified as keyword arguments.   See
-    =cpppo_positioner/smc.py= for details.
+    This class is the gateway for accessing multiple SMC positioning actuators
+    connected via RS-485 serial.  The serial port parameters are =/dev/ttyS1=,
+    38400 Baud, 8 bits, 1 stop, no parity, and a .25s poll rate.  These can all
+    be specified as keyword arguments.  See =cpppo_positioner/smc.py= for
+    details.
     : from cpppo_positioner import smc
     : gateway		= smc.smc_modbus()
 
-*** .position -- Complete operation, Initiate new position
+*** =.position= -- Complete operation, Initiate new position
     
     The .position method checks that any current position operation is complete,
     and then sends any new position data, starting the new position operation.
@@ -63,7 +63,7 @@
     positioning; any values not specified in subsequent position calls will not
     be changed.
 
-*** .status
+*** =.status= -- Return full status and position data
 
     Returns the current complete set of status and data values for the actuator.
     If any value has not yet been polled, it will be =None=.  Here is an example
