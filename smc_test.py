@@ -68,9 +68,9 @@ def test_smc_basic( simulated_actuator_1, simulated_actuator_2 ):
     assert status['current_position'] == 0
 
     # Modify actuator 1 current postion
-    poller			= positioner.unit( uid=1 )
-    poller.write( 40001 + 0x9000, 0x0000 )
-    poller.write( 40001 + 0x9001, 0x3a98 )
+    unit			= positioner.unit( uid=1 )
+    unit.write( 40001 + 0x9000, 0x0000 )
+    unit.write( 40001 + 0x9001, 0x3a98 )
     
     # make certain it gets polled correctly with updated value
     now				= cpppo.timer()
@@ -84,4 +84,24 @@ def test_smc_basic( simulated_actuator_1, simulated_actuator_2 ):
     # but the unmodified actuator should still now be polling a 0...
     assert positioner.status( actuator=2 )['current_position'] is 0
 
-    
+
+def test_smc_position( simulated_actuator_1, simulated_actuator_2 ):
+    command,address		= simulated_actuator_1
+    command,address		= simulated_actuator_2
+
+    positioner			= smc.smc_modbus()
+
+    # No position data; should just check that previous positioning complete
+    # (it will always be complete, because the positioner )
+    unit			= positioner.unit( uid=1 )
+    '''
+    unit.write( smc.data.X4B_INP.addr, True ) # Positioning incomplete
+    try:
+        status			= positioner.position( actuator=1, timeout=.1 )
+        assert False, "Should have failed to detect positioning completion"
+    except Exception as exc:
+        assert 'failure' in str( exc )
+    unit.write( smc.data.X4B_INP.addr, False ) # Positioning complete
+    '''
+    status			= positioner.position( actuator=1, timeout=5 )
+    assert status['X4B_INP'] == False, "Should have detected positioning complete: %r" % ( status )

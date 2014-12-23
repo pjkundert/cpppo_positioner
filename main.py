@@ -164,8 +164,8 @@ def main( argv=None, idle_service=None, **kwds ):
         description = "Transmit position to actuators.",
         epilog = "" )
 
-    ap.add_argument( '-g', '--gateway', default='smc.smc_lec_gen1',
-                     help="Gateway module.class for positioning actuator (default: smc.smc_lec_gen1)" )
+    ap.add_argument( '-g', '--gateway', default='smc.smc_modbus',
+                     help="Gateway module.class for positioning actuator (default: smc.smc_modbus)" )
     ap.add_argument( '-c', '--config', default=None,
                      help="Gateway module.class configuration JSON (default: None)" )
     ap.add_argument( '-v', '--verbose', default=0, action="count",
@@ -273,7 +273,7 @@ def main( argv=None, idle_service=None, **kwds ):
 
         # A position dict in 'dat'; attempt to position to it.  We'll wait forever to establish a
         # connection to the gateway, and then attempt each positioning command until it succeeds.
-        logging.normal( "Position: %r", dat )
+        logging.normal( "Position: actuator %3s parsed ; params: %r", dat.get( 'actuator', 'N/A' ), dat )
         count		       += 1
         while success < count:
             if not gateway:
@@ -288,13 +288,16 @@ def main( argv=None, idle_service=None, **kwds ):
                     continue
 
             # Have a gateway; issue the positioning command, discarding the Gateway on failure and
-            # looping; otherwise, fall thru after success (gateway is Truthy) and get next command
+            # looping; otherwise, fall thru after success (gateway is Truthy) and get next command.
+            # A positioning command with no position data (eg. only actuator and/or timeout) should
+            # just confirm that the previous positioning operation is complete.
             try:
-                gateway.position( **dat )
+                status		= gateway.position( **dat )
                 success	       += 1
-                logging.normal( "Position: %r success", dat )
+                logging.normal(  "Position: actuator %3s success; status: %r", dat.get( 'actuator', 'N/A' ), status )
             except Exception as exc:
-                logging.warning( "Position: %r failure; closing gateway: %s\n%s", dat, exc, traceback.format_exc() )
+                logging.warning( "Position: actuator %3s failure; params: %r; %s\n%s", dat.get( 'actuator', 'N/A' ),
+                                 dat, exc, traceback.format_exc() )
                 gateway.close()
                 gateway		= None
         

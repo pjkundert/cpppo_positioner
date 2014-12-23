@@ -25,7 +25,20 @@ __copyright__                   = "Copyright (c) 2014 Hard Consulting Corporatio
 __license__                     = "Dual License: GPLv3 (or later) and Commercial (see LICENSE)"
 
 import sys
+import os
 
-from .main import main
+if __name__ == "__main__" and __package__ is None:
+    # Ensure that importing works (whether cpppo_positioner installed or not) with:
+    #   python -m cpppo_positioner.simulator ...
+    #   ./cpppo_positioner/simulator.py ...
+    #   ./simulator.py ...
+    __package__			= "cpppo_positioner"
+    try:
+        import cpppo_positioner
+    except ImportError:
+        # 
+        sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath( __file__ ))))
+
+from cpppo_positioner.main import main
 
 sys.exit( main() )

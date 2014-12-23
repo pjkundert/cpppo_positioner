@@ -144,6 +144,11 @@ class poller_modbus( poller, threading.Thread ):
         self.load		= None,None,None# total poll durations over last ~1, 5 and 15 min
         self.start()
 
+    def join( self, timeout=None ):
+        log.info( "Poller joined" )
+        self.done		= True
+        super( poller_modbus, self ).join( timeout=timeout )
+
     def _poller( self, *args, **kwargs ):
         """ Asynchronously (ie. in another thread) poll all the specified
         registers, on the designated poll cycle.  Until we have something to do

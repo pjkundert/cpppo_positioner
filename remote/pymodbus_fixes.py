@@ -55,6 +55,8 @@ from pymodbus.pdu import ExceptionResponse, ModbusResponse
 from pymodbus.utilities import checkCRC
 from pymodbus.datastore.store import ModbusSparseDataBlock
 
+import serial
+
 class modbus_sparse_data_block( ModbusSparseDataBlock ):
     """Implement a ModbusSparseDataBlock that isn't spectacularly inefficient, and also correctly
     deduces the lowest address.
@@ -250,7 +252,7 @@ def modbus_rtu_read( fd, decoder, size=1024, timeout=None ):
         # to do that via PySerial!
         c			= os.read( fd, 1 )
         if not c:
-            raise SerialException('device reports readiness to read but returned no data (device disconnected or multiple access on port?)')
+            raise serial.SerialException('device reports readiness to read but returned no data (device disconnected or multiple access on port?)')
         incoming	       += c
         logging.debug( "Modbus/RTU %s Receive reading in %7.3f/%7.3fs; %d bytes", decoder.__class__.__name__,
                        cpppo.timer() - begun, timeout if timeout is not None else cpppo.inf,

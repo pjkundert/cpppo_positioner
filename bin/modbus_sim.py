@@ -106,12 +106,11 @@ if __name__ == "__main__" and __package__ is None:
     # Ensure that importing works (whether cpppo_positioner installed or not) with:
     #   python -m cpppo_positioner.bin.modbus_sim ...
     #   ./cpppo_positioner/bin/modbus_sim.py ...
-    #   ./bin/modbus_sym.py ... y
+    #   ./bin/modbus_sym.py ...
     __package__			= "cpppo_positioner.bin"
     try:
         import cpppo_positioner
     except ImportError:
-        # 
         sys.path.append( os.path.dirname( os.path.dirname( os.path.dirname( os.path.abspath( __file__ )))))
         
 from cpppo_positioner.remote.pymodbus_fixes import (
@@ -297,6 +296,10 @@ def registers_context( registers, slaves=None ):
         log.info( "Modbus Slave IDs:  %s", slaves or "(all)" )
 
 
+# Global 'context'; The caller of 'main' may want a separate Thread to be able
+# to access/modify the data store...
+context				= None
+
 #---------------------------------------------------------------------------#
 # Creation Factories
 #   - always take 'address'; underlying Modbus...Server may differ
@@ -312,6 +315,7 @@ def StartTcpServerLogging( registers, identity=None, framer=ModbusSocketFramer, 
     :param address: An optional (interface, port) to bind to.
     :param slaves: An optional single (or list of) Slave IDs to serve
     '''
+    global context
     context			= registers_context( registers, slaves=slaves )
     server			= modbus_server_tcp( context, framer, identity, address,
                                                    **kwds )
@@ -334,7 +338,7 @@ def StartRtuServerLogging( registers, identity=None, framer=modbus_rtu_framer_co
 
 
     '''
-
+    global context
     context			= registers_context( registers, slaves=slaves )
     server			= modbus_server_rtu( context, framer, identity, port=address,
                                                       **kwds )
@@ -347,7 +351,7 @@ def StartRtuServerLogging( registers, identity=None, framer=modbus_rtu_framer_co
     server.serve_forever()
 
 
-def main():
+def main( argv=None ):
     parser			= argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog = """\
@@ -397,7 +401,7 @@ def main():
     parser.add_argument( '-c', '--config',	default=None,
                          help="""JSON config data for Modbus framer (eg. {"baudrate":19200}) (default: None)""" )
     parser.add_argument( 'registers', nargs="+" )
-    args			= parser.parse_args()
+    args			= parser.parse_args( argv )
     
     # Deduce logging level and target file (if any)
     levelmap 			= {
