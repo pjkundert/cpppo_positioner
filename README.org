@@ -101,17 +101,17 @@
     integer actuator number is required, followed by optional flags (a variable
     number of positional parameters)
     
-    | flags         | description                       |
-    |---------------+-----------------------------------|
-    | IN[0-5]       |                                   |
-    | HOLD          |                                   |
-    | SVON          |                                   |
-    | DRIVE         |                                   |
-    | RESET         |                                   |
-    | SETUP         |                                   |
-    | JOG_MINUS     |                                   |
-    | JOG_PLUS      |                                   |
-    | INPUT_INVALID |                                   |
+    | flags          | description |
+    |----------------+-------------|
+    | IN[0-5]        |             |
+    | HOLD           |             |
+    | SVON           |             |
+    | DRIVE          |             |
+    | RESET          |             |
+    | SETUP          |             |
+    | JOG\_MINUS     |             |
+    | JOG\_PLUS      |             |
+    | INPUT\_INVALID |             |
 
 
 *** =.status= -- Return full status and position data

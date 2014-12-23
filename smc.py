@@ -24,7 +24,7 @@ __email__                       = "perry@hardconsulting.com"
 __copyright__                   = "Copyright (c) 2014 Hard Consulting Corporation"
 __license__                     = "Dual License: GPLv3 (or later) and Commercial (see LICENSE)"
 
-__all__				= ["smc_lec_gen1"]
+__all__				= ["smc_modbus"]
 
 import logging
 import struct
@@ -43,7 +43,7 @@ PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
 PORT_BAUDRATE			= 38400
-PORT_TIMEOUT			= 0.1		# RS-485 I/O timeout		
+PORT_TIMEOUT			= 0.1		# RS-485 I/O timeout
 
 POLL_RATE			= .25
 
