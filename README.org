@@ -41,7 +41,14 @@
     then only the operation completion is checked; no new positioning operation
     is initiated.
     : gateway.position( actuator=1, timeout=10.0, position=12345, speed=100, ... )
-    
+
+    | keyword  | description                                               |
+    |----------+-----------------------------------------------------------|
+    | actuator | The actuator number to operate on                         |
+    | timeout  | Allowed number of seconds to complete (forever if None)   |
+    | svoff    | If positioning complete, turn off servo                   |
+    | noop     | Don't return home, write new step data but don't initiate |
+
     The full set of positioning parameters defined by the SMC actuator is:
     
     | keyword        | units  |              description |
@@ -63,13 +70,43 @@
     positioning; any values not specified in subsequent position calls will not
     be changed.
 
+    To just confirm that a previous positioning operation has completed:
+    : .position( actuator=1, timeout=3 ) # success if completes w/in 3 seconds
+    : .position( actuator=1, svoff=True, timeout=3 ) # ... and turn off servo
+
+    To check for completion and then return to home position within timeout:
+    : .position( actuator=1, home=True, timeout=3 )
+
+    To check for completion then (without returning to home position), initiate new
+    positioning operation to 150.00mm, within timeout of 3 seconds:
+    : .position( actuator=1, position=15000, timeout=3 )
+
+*** =.complete= -- Check for completion
+
+    If you wish, you may invoke the =.complete= method directly (instead of
+    implicitly at the beginning of every =.position= invocation).
+
+    | keyword  | description                                             |
+    |----------+---------------------------------------------------------|
+    | actuator | The actuator number to operate on                       |
+    | timeout  | Allowed number of seconds to complete (forever if None) |
+    | svoff    | If positioning complete, turn off servo                 |
+
+    To check for completion and disable servo within timeout of 3 seconds:
+    : complete( actuator=1, svoff=True, timeout=3 )
+
 *** =.status= -- Return full status and position data
 
     Returns the current complete set of status and data values for the actuator.
-    If any value has not yet been polled, it will be =None=.  Here is an example
-    (formatted for readability)
+    If any value has not yet been polled, it will be =None=. 
+
+    | keyword  | description                                             |
+    |----------+---------------------------------------------------------|
+    | actuator | The actuator number to operate on                       |
+
+    Here is an example (formatted for readability):
     #+BEGIN_EXAMPLE
-    >>> gateway.status( actuator=1 )
+    .status( actuator=1 )
     {
         "X40_OUT0": false,
         "X41_OUT1": false,
@@ -168,7 +205,8 @@
 ** SMC Gateway Simulator
 
    A basic simulator of some of the Modbus/RTU I/O behaviour of an SMC actuator
-   is implemented for testing purposes.
+   is implemented for testing purposes.  To use, disconnect the SMC actuators,
+   and re-connect the Lanner's loop-back plug to the RS-485 harness RJ45 socket.
 
    Ensure that either you have installed the cpppo_positioner, *or* are in the
    directory containing the cloned cpppo_positioner repository): To simulate an
