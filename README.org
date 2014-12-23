@@ -24,9 +24,98 @@
    A Python API is provided to implement positioning control.
    : from import cpppo_positioner import smc
    : gateway		= smc.smc_modbus()
-   : gatway.position( actuator=0, timeout=10.0, position=12345, speed=100, ... )
 
-*** Command- or Pipe-line usage
+*** .position -- Complete operation, Initiate new position
+    
+    The .position method checks that any current position operation is complete,
+    and then sends any new position data, starting the new position operation.
+    If no new data is provided (eg. only =actuator= and/or =timeout= provided),
+    then only the operation completion is checked; no new positioning operation
+    is initiated.
+
+    : gateway.position( actuator=1, timeout=10.0, position=12345, speed=100, ... )
+    
+    The full set of positioning parameters defined by the SMC actuator is:
+    
+    | keyword       | units  |              description |
+    |---------------+--------+--------------------------|
+    | movement_mode |        | 1: absolute, 2: relative |
+    | speed         | mm/s   |                  1-65535 |
+    | position      | .01 mm |            +/-2147483647 |
+    | acceleration  | mm/s^2 |                  1-65535 |
+    | deceleration  | mm/s^2 |                  1-65535 |
+    | pushing_force | %      |                    0-100 |
+    | trigger_level | %      |                    0-100 |
+    | pushing_speed | mm/s   |                  1-65535 |
+    | moving_force  | %      |                    0-300 |
+    | area_1        | .01 mm |            +/-2147483647 |
+    | area_2        | .01 mm |            +/-2147483647 |
+    | in_position   | .01 mm |             1-2147483647 |
+    
+    It is recommended to specify all the values at least for the initial
+    positioning; any values not specified in subsequent position calls will not
+    be changed.
+
+*** .status
+
+    Returns the current complete set of status and data values for the actuator.
+    If any value has not yet been polled, it will be =None=.  Here is an example
+    (formatted for readability)
+
+   #+BEGIN_EXAMPLE
+   >>> gateway.status( actuator=1 )
+   {
+       "X40_OUT0": false,
+       "X41_OUT1": false,
+       "X42_OUT2": false,
+       "X43_OUT3": false,
+       "X44_OUT4": false,
+       "X45_OUT5": false,
+       "X48_BUSY": false,
+       "X49_SVRE": false,
+       "X4A_SETON": false,
+       "X4B_INP": false,
+       "X4C_AREA": false,
+       "X4D_WAREA": false,
+       "X4E_ESTOP": false,
+       "X4F_ALARM": false,
+       "Y10_IN0": false,
+       "Y11_IN1": false,
+       "Y12_IN2": false,
+       "Y13_IN3": false,
+       "Y14_IN4": false,
+       "Y15_IN5": false,
+       "Y18_HOLD": false,
+       "Y19_SVON": false,
+       "Y1A_DRIVE": false,
+       "Y1B_RESET": false,
+       "Y1C_SETUP": false,
+       "Y1D_JOG_MINUS": false,
+       "Y1E_JOG_PLUS": false,
+       "Y30_INPUT_INVALID": false,
+       "acceleration": 0,
+       "area_1": 0,
+       "area_2": 0,
+       "current_position": 0,
+       "current_speed": 0,
+       "current_thrust": 0,
+       "deceleration": 0,
+       "driving_data_no": 0,
+       "in_position": 0,
+       "movement_mode": 0,
+       "moving_force": 0,
+       "operation_start": 0,
+       "position": 0,
+       "pushing_force": 0,
+       "pushing_speed": 0,
+       "speed": 0,
+       "target_position": 0,
+       "trigger_level": 0
+   }
+   #+END_EXAMPLE
+
+
+   *** Command- or Pipe-line usage
 
     An executable module entry point (=python -m cpppo_positioner=), and a
     convenience executable script (=cpppo_positioner=) are supplied.
@@ -73,51 +162,11 @@
 
 ** SMC Gateway Simulator
 
-   A basic simulator of some of the I/O behaviour of the SMC Gateway is
-   implemented for testing purposes.
+   A basic simulator of some of the Modbus/RTU I/O behaviour of an SMC actuator
+   is implemented for testing purposes.
 
    Ensure that either you have installed the cpppo_positioner, *or* are in the
-   directory containing the cloned cpppo_positioner repository): To simulate a
-   number of SMC positioning actuators behind an SMC LEC-GEN1 gateway, run:
-   : $ python -m cpppo_positioner.simulator -v \
-   :     --actuators 3 IN=SINT[256]@0x1FF/1/1 OUT=SINT[256]@0x1FF/1/2
-   : ...
-   : ... NORMAL   main       Creating tag: IN=SINT [256]
-   : ... WARNING  __init__   Simulating 3 SMC Positioning Actuators
-   : ... NORMAL   __init__   SMC Gateway Tag IN : Class   511/0x01ff, Instance   1, Attribute     1
-   : ... NORMAL   main       Creating tag: OUT=SINT [256]
-   : ... NORMAL   __init__   SMC Gateway Tag OUT: Class   511/0x01ff, Instance   1, Attribute     2
-   : ... NORMAL   main       EtherNet/IP Simulator: ('', 44818)
-   : ...
+   directory containing the cloned cpppo_positioner repository): To simulate an
+   SMC positioning actuator 1 on /dev/ttyS0:
+   : $ python -m cpppo_positioner.simulator -v /dev/ttyS0 1
 
-   Note: the second command-line continuation line above starting =--actuators=
-   contains all the defaults, and can be skipped unless you wish to change some
-   of them.  These optional arguments are:
-   : --actuators # -- how many actuators you wish to simulate; default: 3
-   : IN=...@C/I/A  -- IDs for Class C (eg. 0x1FF, 511), Instance I and Attr A
-   : 
-   This starts up the simulator, specifying that the simulated Gateway is at CIP
-   Class ID 0x1FF (511), and the IN and OUT Attributes are at Instance ID 1,
-   Attribute IDs 1 and 2, respectively.  It will bind to port 44818 on all
-   interfaces (including 'localhost').
-
-   Once the simulator is running, test that the communication works, by issuing
-   a basic positioning command:
-   : $ python -m cpppo_positioner -va localhost \
-   :     --config '{ "in": "@0x1FF/1/1", "out": "@0x1FF/1/2" }' \
-   :     '{ "actuator": 0, "position": 12345 }'
-   : ... NORMAL   main       Position: {u'actuator': 0, u'position': 12345}
-   : ... NORMAL   main       Gateway: localhost:44818 connected
-   : ... NORMAL   main       Completed 1/1 actuator positions in   0.021s
-   : $
-
-   Note: The second command-line continuation line above starting =--config=
-   shows how to pass configurations to the actuator class.  It contains
-   defaults, and can be skipped unless you want to change some of them.
-   Presently, the smc.smc_lec_gen allows the following configurations:
-   : in       -- The @C/I/D Class, Instance and Attribute of the IN array
-   : out      -- The @C/I/D Class, Instance and Attribute of the OUT array
-   : depth    -- Pipelining depth to use for EtherNet/IP CIP I/O (default: 1)
-   : multiple -- Use CIP Multiple Packet Service for requests (default: False)
-   : timeout  -- Timeout in seconds for all EtherNet/IP CIP I/O (default: 1.0)
-   : latency  -- How long to wait between refreshing IN/OUT data (default: 0.1)
