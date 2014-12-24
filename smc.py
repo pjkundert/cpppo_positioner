@@ -244,10 +244,10 @@ class smc_modbus( modbus_client_rtu ):
     __del__			= close
 
     def unit( self, uid ):
-        """Return the poller to access data for the given unit uid"""
+        """Return the poller to access data for the given unit uid.  Force """
         if uid not in self.pollers:
             self.pollers[uid]	= poller_modbus( "SMC actuator %s" % ( uid ), client=self,
-                                                 unit=uid, rate=self.rate )
+                                                 multi=True, unit=uid, rate=self.rate )
         return self.pollers[uid]
     
     def status( self, actuator=1 ):
@@ -417,11 +417,11 @@ class smc_modbus( modbus_client_rtu ):
                 stepdata[addr-STEP_DATA_BEG+i] = values[i]
         unit.write( STEP_DATA_BEG, stepdata )
 
-        # 5: set operation_start (unless 'noop')
+        # 5: set operation_start to 0x0100 (1 in high-order bytes) unless 'noop'
         if not noop:
-            unit.write( data.operation_start.addr, 1 )
+            unit.write( data.operation_start.addr, 0x0100 )
             started			= self.check(
-                predicate=lambda: unit.read( data.operation_start.addr ),
+                predicate=lambda: unit.read( data.operation_start.addr ) == 0x0100,
                 deadline=None if timeout is None else begin + timeout )
             assert started, \
                 "Failed to detect positioning start within timeout"

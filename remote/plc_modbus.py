@@ -127,7 +127,7 @@ class poller_modbus( poller, threading.Thread ):
     value, all underlying polling _reads use the supplied 'unit' value.
 
     """
-    def __init__( self, description, client, reach=100, unit=None, **kwargs ):
+    def __init__( self, description, client, reach=100, multi=False, unit=None, **kwargs ):
         poller.__init__( self, description=description, **kwargs )
         threading.Thread.__init__( self, target=self._poller )
         assert isinstance( client, modbus_client_timeout ), \
@@ -137,6 +137,7 @@ class poller_modbus( poller, threading.Thread ):
         self.daemon		= True
         self.done		= False
         self.reach		= reach		# Merge registers this close into ranges
+        self.multi		= multi		# Force WriteMultipleRegisters... even for single registers
         self.polling		= set()		# Ranges known to be successfully polling
         self.failing		= set() 	# Ranges known to be failing
         self.duration		= 0.0		# Duration of last poll completed
@@ -282,22 +283,22 @@ class poller_modbus( poller, threading.Thread ):
         # Use address to deduce Holding Register or Coil (the only writable
         # entities); Statuses and Input Registers result in a pymodbus
         # ParameterException
-        multi			= isinstance( value, (list,tuple) )
+        multi			= hasattr( value, '__iter__' )
         writer			= None
         if 400001 <= address <= 465536:
             # 400001-465536: Holding Registers
-            writer		= ( WriteMultipleRegistersRequest
-                                    if multi else WriteSingleRegisterRequest )
+            writer		= ( WriteMultipleRegistersRequest if multi or self.multi
+                                    else WriteSingleRegisterRequest )
             address    	       -= 400001
         elif 40001 <= address <= 99999:
             #  40001-99999: Holding Registers
-            writer		= ( WriteMultipleRegistersRequest if multi
+            writer		= ( WriteMultipleRegistersRequest if multi or self.multi
                                     else WriteSingleRegisterRequest )
             address    	       -= 40001
         elif 1 <= address <= 9999:
             #      1-9999: Coils
-            writer		= ( WriteMultipleCoilsRequest
-                                    if multi else WriteSingleCoilRequest )
+            writer		= ( WriteMultipleCoilsRequest if multi # *don't* force multi
+                                    else WriteSingleCoilRequest )
             address	       -= 1
         else:
             # 100001-165536: Statuses (not writable)
@@ -307,6 +308,10 @@ class poller_modbus( poller, threading.Thread ):
             pass
         if not writer:
             raise ParameterException( "Invalid Modbus address for write: %d" % ( address ))
+
+        if writer is WriteMultipleRegistersRequest:
+            # Overcome bug in 1.2.0/1.3.0 in handling single requests.  Also reifies generators.
+            value		= list( value ) if multi else [ value ]
 
         unit			= kwargs.pop( 'unit', self.unit )
         result			= self.client.execute( writer( address, value, unit=unit, **kwargs ))
