@@ -36,12 +36,14 @@ import serial
 from cpppo_positioner.remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
 from cpppo_positioner.remote.plc_modbus import poller_modbus
 
+from pymodbus.constants import Defaults
+
 PORT_MASTER			= '/dev/ttyS1'
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
 PORT_BAUDRATE			= 38400
-PORT_TIMEOUT			= 1.5
+PORT_TIMEOUT			= 0.1		# RS-485 I/O timeout		
 
 POLL_RATE			= .25
 
@@ -176,7 +178,7 @@ data.driving_data_no.addr	= 40001 + 0x9006
 
 data.operation_start		= {}		# 1: Starts operation according to 9102-9110
 data.operation_start.addr	= 40001 + 0x9100
-POSITION_DATA_BEG		= 40001 + 0x9102# 0x9101 unused!
+STEP_DATA_BEG		= 40001 + 0x9102# 0x9101 unused!
 data.movement_mode		= {}		# 1: absolute, 2: relative
 data.movement_mode.addr		= 40001 + 0x9102
 data.speed			= {}		# 1-65535 mm/s
@@ -205,7 +207,7 @@ data.area_2.format		= 'i'
 data.in_position		= {}		# 1-2147483647 0.01mm
 data.in_position.addr		= 40001 + 0x9110# == 77137 or 437137
 data.in_position.format		= 'i'		# == 77138 or 437138 (4 bytes, 2 words!)
-POSITION_DATA_END		= 40001 + 0x9111
+STEP_DATA_END		= 40001 + 0x9111
 
 
 class smc_modbus( modbus_client_rtu ):
@@ -213,9 +215,13 @@ class smc_modbus( modbus_client_rtu ):
     processors.  
 
     """
+    TIMEOUT			= 5.0		# Positioning timeout (forever, if changed to None)
+
     def __init__( self, address=PORT_MASTER, timeout=PORT_TIMEOUT, baudrate=PORT_BAUDRATE,
                   stopbits=PORT_STOPBITS, bytesize=PORT_BYTESIZE, parity=PORT_PARITY,
                   rate=POLL_RATE ):
+        Defaults.Timeout	= timeout	# RS-485 I/O timeout
+
         super( smc_modbus, self, ).__init__(
             framer=modbus_rtu_framer_collecting, port=address, stopbits=stopbits, bytesize=bytesize,
             parity=parity, baudrate=baudrate )
@@ -284,12 +290,12 @@ class smc_modbus( modbus_client_rtu ):
 
         return result
         
-    LATENCY			= 0.1
     def check( self, predicate, deadline=None ):
+        """Check if 'predicate' comes True before 'deadline', every self.rate seconds"""
         done			= predicate()
         while not done and ( deadline is None or cpppo.timer() < deadline ):
-            time.sleep( self.LATENCY if deadline is None
-                        else min( self.LATENCY, max( 0, deadline - cpppo.timer() )))
+            time.sleep( self.rate if deadline is None
+                        else min( self.rate, max( 0, deadline - cpppo.timer() )))
             done		= predicate()
         return done
 
@@ -297,9 +303,9 @@ class smc_modbus( modbus_client_rtu ):
         """Ensure that any prior operation on the actuator is complete w/in timeout; return True iff the
         current operation is detected as being complete."""
         begin			= cpppo.timer()
-
+        if timeout is None:
+            timeout		= self.TIMEOUT
         unit			= self.unit( uid=actuator )
-
         # Loop on True/None; terminate only on False; X4B_INP contains 0/False when complete
         complete		= self.check(
             predicate=lambda: unit.read( data.X4B_INP.addr ) == False,
@@ -308,8 +314,11 @@ class smc_modbus( modbus_client_rtu ):
             "Complete: actuator %3d %s", actuator, "success" if complete else "failure" )
         return complete
 
-    def position( self, actuator=1, timeout=None, **kwds ):
+    def position( self, actuator=1, timeout=TIMEOUT, home=False, noop=False, **kwds ):
         """Begin position operation on 'actuator' w/in 'timeout'.  
+
+        :param home: Return to home position before any other movement
+        :param noop: Do not perform final activation
 
         Running with specified data
 
@@ -321,18 +330,22 @@ class smc_modbus( modbus_client_rtu ):
         4   - Write data to D9102-D9110
         5   - Write Operation Start instruction "1" to D9100 (returns to 0 after processed)
 
-        If no positioning kwds are provided, then no new position is configured
+        If no positioning kwds are provided, then no new position is configured.  If 'noop' is True,
+        everything except the final activation is performed.
 
         """
         begin			= cpppo.timer()
+        if timeout is None:
+            timeout		= self.TIMEOUT
         assert self.complete( actuator=actuator, timeout=timeout ), \
             "Previous actuator position incomplete within timeout %r" % timeout
-        if not kwds:
-            return self.status( actuator=actuator )
+        status			= self.status( actuator=actuator )
+        if not home and not kwds:
+            return status
 
-        # Previous positioning complete, and new position keywords provided.
+        # Previous positioning complete, and possibly new position keywords provided.
         logging.detail( "Position: actuator %3d started: %r", actuator, kwds )
-        unit			= elf.unit( uid=actuator )
+        unit			= self.unit( uid=actuator )
 
         # 1: set INPUT_INVALID
         unit.write( data.Y30_INPUT_INVALID.addr, 1 )
@@ -348,43 +361,63 @@ class smc_modbus( modbus_client_rtu ):
         assert svre, \
             "Failed to set SVON True and read SVRE True"
 
-        # 3: set SETUP, check SETON
-        if timeout:
-            assert cpppo.timer() <= begin + timeout, \
-                "Failed to complete positioning SETUP/SETON within timeout"
-        unit.write( data.Y1C_SETUP.addr, 1 )
-        seton			= self.check(
-            predicate=unit.read( data.Y1C_SETUP.addr ) and unit.read( data.X4A_SETON.addr ),
-            deadline=None if timeout is None else begin + timeout )
-        assert seton, \
-            "Failed to set SETUP True and read SETON True"
+        # 3: Return to home? set SETUP, check SETON.  Always clear SETUP.
+        if home and not noop:
+            if timeout:
+                assert cpppo.timer() <= begin + timeout, \
+                    "Failed to complete positioning SETUP/SETON within timeout"
+            unit.write( data.Y1C_SETUP.addr, 1 )
+            seton			= self.check(
+                predicate=lambda: unit.read( data.Y1C_SETUP.addr ) and unit.read( data.X4A_SETON.addr ),
+                deadline=None if timeout is None else begin + timeout )
+            assert seton, \
+                "Failed to set SETUP True and read SETON True"
+        unit.write( data.Y1C_SETUP.addr, 0 )
+        
+        # 4: Write any changed position data.  Do it all at once; read the current values (ensuring
+        # they have all been polled), then update any that have been provided as keywords, and write
+        # them back out.  The actuator doesn't accept individual writes of registers in the step
+        # data area between D9002-D9111...
+        
+        stepdata		= None
+        while (( not stepdata or any( d is None for d in stepdata ))
+               and ( not timeout or cpppo.timer() < begin + timeout )):
+            if stepdata:
+                time.sleep( min( self.rate, max( 0, self.rate if not timeout
+                                                 else ( begin + timeout ) - cpppo.timer() )))
+            stepdata		= [ unit.read( r ) for r in range( STEP_DATA_BEG, STEP_DATA_END+1 ) ]
+        assert stepdata and not any( d is None for d in stepdata ), \
+            "Failed to read valid step data for positioning within timeout %r" % ( timeout )
 
-        # 4: Write any changed position data
         for k,v in kwds.items():
             assert k in data, \
                 "Unrecognized positioning keyword: %s == %v" % ( k, v )
-            assert POSITION_DATA_BEG <= data[k].addr <= POSITION_DATA_END, \
+            assert STEP_DATA_BEG <= data[k].addr <= STEP_DATA_END, \
                 "Invalid positioning keyword: %s == %v; not within position data address range" % ( k, v )
             format		= data[k].get( 'format' )
             if format:
                 # Create a big-endian buffer.  This will be some multiple of register size.  Then,
                 # unpack it into some number of 16-bit big-endian registers (this will be a tuple).
-                buffer		= struct.pack( '>'+format, v )
-                value		= struct.unpack( '>H', buffer )
+                buf		= struct.pack( '>'+format, v )
+                values		= [ struct.unpack_from( '>H', buf[o:] )[0] for o in range( 0, len( buf ), 2 ) ]
             else:
-                value		= v
+                values		= [ v ]
             if timeout:
                 assert cpppo.timer() <= begin + timeout, \
                     "Failed to complete positioning data update within timeout"
-            logging.info( "Position: actuator %3d updated: %24s: %s (== %s)", actuator, k, v, value )
-            unit.write( data[k].addr, value )
+            logging.info( "Position: actuator %3d updated: %24s: %s (== %s)", actuator, k, v, values )
+            addr		= data[k].addr
+            for i in range( len( values )):
+                stepdata[addr-STEP_DATA_BEG+i] = values[i]
+        unit.write( STEP_DATA_BEG, stepdata )
 
-        # 5: set operation_start
-        unit.write( data.operation_start.addr, 1 )
-        started			= self.check(
-            predicate=unit.read( data.operation_start.addr ) == 1,
-            deadline=None if timeout is None else begin + timeout )
-        assert started, \
-            "Failed to detect positioning start within timeout"
+        # 5: set operation_start (unless 'noop')
+        if not noop:
+            unit.write( data.operation_start.addr, 1 )
+            started			= self.check(
+                predicate=lambda: unit.read( data.operation_start.addr ),
+                deadline=None if timeout is None else begin + timeout )
+            assert started, \
+                "Failed to detect positioning start within timeout"
 
         return self.status( actuator=actuator )

@@ -177,7 +177,7 @@ class modbus_rtu_framer_collecting( ModbusRtuFramer ):
                 self._ModbusRtuFramer__buffer = saved[start:]
                 if super( modbus_rtu_framer_collecting, self ).checkFrame():
                     # Found a frame!  Update saved if we had to advance due to noise
-                    logging.info( "Found valid frame at %d/%d bytes", start, len( saved ))
+                    logging.debug( "Found valid frame at %d/%d bytes", start, len( saved ))
                     if start:
                         saved	= saved[start:]
                     return True

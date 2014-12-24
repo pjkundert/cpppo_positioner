@@ -85,8 +85,9 @@ class poller( object ):
         self._poll( address )
         self._receive()
         value			= self._data[address] if self.online else None
-        ( log.info if self.online else log.normal )( "%s/%6d %s> %s" % (
-                self.description, address, "-x" if not self.online else "--", reprlib.repr( value )))
+        if log.isEnabledFor( logging.DEBUG ):
+            log.debug( "%s/%6d %s> %s", self.description, address, "-x" if not self.online else "--",
+                       reprlib.repr( value ))
         return value
 
     def write( self, address, value, **kwargs ):

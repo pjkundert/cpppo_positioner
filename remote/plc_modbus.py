@@ -145,7 +145,8 @@ class poller_modbus( poller, threading.Thread ):
         self.start()
 
     def join( self, timeout=None ):
-        log.info( "Poller joined" )
+        if self.is_alive():
+            log.info( "Joining: %s", self.description )
         self.done		= True
         super( poller_modbus, self ).join( timeout=timeout )
 
