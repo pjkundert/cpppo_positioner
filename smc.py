@@ -299,9 +299,12 @@ class smc_modbus( modbus_client_rtu ):
             done		= predicate()
         return done
 
-    def complete( self, actuator=1, timeout=None ):
+    def complete( self, actuator=1, svoff=False, timeout=None ):
         """Ensure that any prior operation on the actuator is complete w/in timeout; return True iff the
-        current operation is detected as being complete."""
+        current operation is detected as being complete.  If svoff is True, we'll turn off the servo
+        (clear Y19_SVON) if we detect completion.
+
+        """
         begin			= cpppo.timer()
         if timeout is None:
             timeout		= self.TIMEOUT
@@ -312,9 +315,12 @@ class smc_modbus( modbus_client_rtu ):
             deadline=None if timeout is None else begin + timeout )
         ( logging.warning if not complete else logging.detail )(
             "Complete: actuator %3d %s", actuator, "success" if complete else "failure" )
+        if svoff and complete:
+            logging.detail( "ServoOff: actuator %3d", actuator )
+            unit.write( data.Y19_SVON.addr, 0 )
         return complete
 
-    def position( self, actuator=1, timeout=TIMEOUT, home=False, noop=False, **kwds ):
+    def position( self, actuator=1, timeout=TIMEOUT, home=False, noop=False, svoff=False, **kwds ):
         """Begin position operation on 'actuator' w/in 'timeout'.  
 
         :param home: Return to home position before any other movement
@@ -337,7 +343,7 @@ class smc_modbus( modbus_client_rtu ):
         begin			= cpppo.timer()
         if timeout is None:
             timeout		= self.TIMEOUT
-        assert self.complete( actuator=actuator, timeout=timeout ), \
+        assert self.complete( actuator=actuator, svoff=svoff, timeout=timeout ), \
             "Previous actuator position incomplete within timeout %r" % timeout
         status			= self.status( actuator=actuator )
         if not home and not kwds:
@@ -405,7 +411,7 @@ class smc_modbus( modbus_client_rtu ):
             if timeout:
                 assert cpppo.timer() <= begin + timeout, \
                     "Failed to complete positioning data update within timeout"
-            logging.info( "Position: actuator %3d updated: %24s: %s (== %s)", actuator, k, v, values )
+            logging.info( "Position: actuator %3d updated: %16s: %8s (== %s)", actuator, k, v, values )
             addr		= data[k].addr
             for i in range( len( values )):
                 stepdata[addr-STEP_DATA_BEG+i] = values[i]
