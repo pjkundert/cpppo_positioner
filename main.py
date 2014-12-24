@@ -257,6 +257,8 @@ def main( argv=None, idle_service=None, **kwds ):
         if not inp:
             continue
 
+        if gateway and logging.getLogger().isEnabledFor( logging.NORMAL ):
+            logging.normal( "%r", gateway )
         # A non-empty non-comment input in 'inp'; parse it as JSON into 'dat'; allow numeric and dict
         try:
             dat			= json.loads( inp )

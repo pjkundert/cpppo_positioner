@@ -243,10 +243,21 @@ class smc_modbus( modbus_client_rtu ):
 
     __del__			= close
 
+    def __repr__( self ):
+        row			= {}
+        for uid,unit in self.pollers.items():
+            row.setdefault( '', [] ).append( unit.description )
+            for k,v in self.status( actuator=uid ).items():
+                row.setdefault( k, [] ).append( v )
+        out			= []
+        for label in sorted( row ):
+            out.append( "%20s: %s" % ( label, ''.join( "%8s" % ( col ) for col in row[label] )))
+        return "SMC Modbus/RTU Gateway" + ( ":\n" if out else "" ) + "\n".join( out )
+
     def unit( self, uid ):
         """Return the poller to access data for the given unit uid.  Force """
         if uid not in self.pollers:
-            self.pollers[uid]	= poller_modbus( "SMC actuator %s" % ( uid ), client=self,
+            self.pollers[uid]	= poller_modbus( "SMC %s" % ( uid ), client=self,
                                                  multi=True, unit=uid, rate=self.rate )
         return self.pollers[uid]
     
@@ -382,9 +393,8 @@ class smc_modbus( modbus_client_rtu ):
         
         # 4: Write any changed position data.  Do it all at once; read the current values (ensuring
         # they have all been polled), then update any that have been provided as keywords, and write
-        # them back out.  The actuator doesn't accept individual writes of registers in the step
-        # data area between D9002-D9111...
-        
+        # them back out.  The actuator doesn't accept individual register writes, so we could use
+        # multiple register writes for each value, but its quicker to perform one write anyway.
         stepdata		= None
         while (( not stepdata or any( d is None for d in stepdata ))
                and ( not timeout or cpppo.timer() < begin + timeout )):
