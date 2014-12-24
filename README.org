@@ -95,6 +95,25 @@
     To check for completion and disable servo within timeout of 3 seconds:
     : complete( actuator=1, svoff=True, timeout=3 )
 
+*** =.outputs= -- Set/clear outputs (Coils)
+
+    Modifies one or more named outputs (Coils) on the specified actuator.  An
+    integer actuator number is required, followed by optional flags (a variable
+    number of positional parameters)
+    
+    | flags         | description                       |
+    |---------------+-----------------------------------|
+    | IN[0-5]       |                                   |
+    | HOLD          |                                   |
+    | SVON          |                                   |
+    | DRIVE         |                                   |
+    | RESET         |                                   |
+    | SETUP         |                                   |
+    | JOG_MINUS     |                                   |
+    | JOG_PLUS      |                                   |
+    | INPUT_INVALID |                                   |
+
+
 *** =.status= -- Return full status and position data
 
     Returns the current complete set of status and data values for the actuator.
@@ -173,7 +192,24 @@
     line, or as separate lines of input (if standard input is selected, by
     supplying a '-' option):
     : $ python -m cpppo_positioner --address gateway -v "$position"
-    : $ echo "$position" | cpppo_positioner --address gateway -v -
+    : $ echo "$position" | cpppo_positioner -v -
+
+    | JSON type | description                                                     |
+    |-----------+-----------------------------------------------------------------|
+    | number    | delay for the specified seconds                                 |
+    | list      | set/clear the named outputs [<actuator>, "FLAG", "flag"]        |
+    | dict      | actuate the position (just check for completion if no position) |
+
+
+    Here is an example of setting then clearing the RESET output, then beginning
+    a position operation, and then waiting for it to complete in 10 seconds:
+    
+    : $ python -m cpppo_positioner -vv '[1,"RESET"]' 1 '[1,"reset"]' 1 \
+    :    '{"actuator":1, "position":1000, ...}' '{"actuator":1,"timeout":10}'
+
+    See =cpppo_positioner/main.example= for the text of such an example (run it
+    using =bash main.example=, if you want to try it -- it operates
+    actuator #1!)
 
 **** Quoting double-quotes on Windows Powershell
 
@@ -190,14 +226,13 @@
      
      However, when you try to use them, they are re-interpreted on inclusion in a
      command:
-     : PS > python -m cpppo_positioner --address gateway -v "$position"
      : PS > python -m cpppo_positioner -v "$position"
      : ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
      :     Expecting property name: line 1 column 3 (char 2)
      
      So, the only way to do this is to use the strange back-slash + back-tick
      double-escape, directly as a command-line argument:
-     : PS > python -m cpppo_positioner --address gateway -v '{ \`"actuator\`": 0, ... }'
+     : PS > python -m cpppo_positioner -v '{ \`"actuator\`": 0, ... }'
      
      Recommendation: use Linux or Mac, or install Cygwin and use bash on
      Windows.  Trust me; this is just the tip of the iceberg...

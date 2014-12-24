@@ -300,7 +300,7 @@ class smc_modbus( modbus_client_rtu ):
             result[k]		= struct.unpack( '>'+format, buffer )[0]
 
         return result
-        
+
     def check( self, predicate, deadline=None ):
         """Check if 'predicate' comes True before 'deadline', every self.rate seconds"""
         done			= predicate()
@@ -310,10 +310,38 @@ class smc_modbus( modbus_client_rtu ):
             done		= predicate()
         return done
 
+    def outputs( self, actuator, *flags ):
+        """Set one or more 'flag' matching 'NAME' (or clear it, if all lower case 'name' used).  Only
+        Y... (Coils) may be written.  The available flags are:
+        
+            IN[0-5]
+            HOLD
+            SVON
+            DRIVE
+            RESET
+            SETUP
+            JOG_MINUS
+            JOG_PLUS
+            INPUT_INVALID
+
+        """
+        unit			= self.unit( uid=actuator )
+        for f in flags:
+            NAM			= f.upper()
+            nam			= f.lower()
+            key			= [ k for k in super( cpppo.dotdict, data ).keys()
+                                    if k.startswith( 'Y' ) and k.endswith( NAM ) ]
+            assert len( key ) == 1 and f in (NAM,nam), "invalid/ambiguous key name %s" % ( f )
+            val			= bool( f == NAM )
+            logging.detail( "%s/%-8s <== %s", unit.description, f, val )
+            unit.write( data[key[0]].addr, val )
+        return self.status( actuator=actuator )
+
     def complete( self, actuator=1, svoff=False, timeout=None ):
         """Ensure that any prior operation on the actuator is complete w/in timeout; return True iff the
-        current operation is detected as being complete.  If svoff is True, we'll turn off the servo
-        (clear Y19_SVON) if we detect completion.
+        current operation is detected as being complete.
+    
+        If 'svoff' is True, we'll turn off the servo (clear Y19_SVON) if we detect completion.
 
         """
         begin			= cpppo.timer()
@@ -331,7 +359,7 @@ class smc_modbus( modbus_client_rtu ):
             unit.write( data.Y19_SVON.addr, 0 )
         return complete
 
-    def position( self, actuator=1, timeout=TIMEOUT, home=False, noop=False, svoff=False, **kwds ):
+    def position( self, actuator=1, timeout=TIMEOUT, home=True, noop=False, svoff=False, **kwds ):
         """Begin position operation on 'actuator' w/in 'timeout'.  
 
         :param home: Return to home position before any other movement
@@ -357,11 +385,11 @@ class smc_modbus( modbus_client_rtu ):
         assert self.complete( actuator=actuator, svoff=svoff, timeout=timeout ), \
             "Previous actuator position incomplete within timeout %r" % timeout
         status			= self.status( actuator=actuator )
-        if not home and not kwds:
+        if not kwds:
             return status
 
         # Previous positioning complete, and possibly new position keywords provided.
-        logging.detail( "Position: actuator %3d started: %r", actuator, kwds )
+        logging.detail( "Position: actuator %3d setdata: %r", actuator, kwds )
         unit			= self.unit( uid=actuator )
 
         # 1: set INPUT_INVALID
@@ -378,8 +406,9 @@ class smc_modbus( modbus_client_rtu ):
         assert svre, \
             "Failed to set SVON True and read SVRE True"
 
-        # 3: Return to home? set SETUP, check SETON.  Always clear SETUP.
-        if home and not noop:
+        # 3: Return to home? set SETUP, check SETON.  Otherwise, clear SETUP.  It is very unclear
+        #    whether we need to do this, and/or whether we need to clear it afterwards.
+        if home:
             if timeout:
                 assert cpppo.timer() <= begin + timeout, \
                     "Failed to complete positioning SETUP/SETON within timeout"
@@ -387,24 +416,15 @@ class smc_modbus( modbus_client_rtu ):
             seton			= self.check(
                 predicate=lambda: unit.read( data.Y1C_SETUP.addr ) and unit.read( data.X4A_SETON.addr ),
                 deadline=None if timeout is None else begin + timeout )
-            assert seton, \
-                "Failed to set SETUP True and read SETON True"
-        unit.write( data.Y1C_SETUP.addr, 0 )
+            if not seton:
+                logging.warning( "Failed to set SETUP True and read SETON True" )
+            # assert seton, \
+            #    "Failed to set SETUP True and read SETON True"
+        else:
+            unit.write( data.Y1C_SETUP.addr, 0 )
         
-        # 4: Write any changed position data.  Do it all at once; read the current values (ensuring
-        # they have all been polled), then update any that have been provided as keywords, and write
-        # them back out.  The actuator doesn't accept individual register writes, so we could use
-        # multiple register writes for each value, but its quicker to perform one write anyway.
-        stepdata		= None
-        while (( not stepdata or any( d is None for d in stepdata ))
-               and ( not timeout or cpppo.timer() < begin + timeout )):
-            if stepdata:
-                time.sleep( min( self.rate, max( 0, self.rate if not timeout
-                                                 else ( begin + timeout ) - cpppo.timer() )))
-            stepdata		= [ unit.read( r ) for r in range( STEP_DATA_BEG, STEP_DATA_END+1 ) ]
-        assert stepdata and not any( d is None for d in stepdata ), \
-            "Failed to read valid step data for positioning within timeout %r" % ( timeout )
-
+        # 4: Write any changed position data.  The actuator doesn't accept individual register
+        # writes, so we use multiple register writes for each value.
         for k,v in kwds.items():
             assert k in data, \
                 "Unrecognized positioning keyword: %s == %v" % ( k, v )
@@ -421,11 +441,8 @@ class smc_modbus( modbus_client_rtu ):
             if timeout:
                 assert cpppo.timer() <= begin + timeout, \
                     "Failed to complete positioning data update within timeout"
-            logging.info( "Position: actuator %3d updated: %16s: %8s (== %s)", actuator, k, v, values )
-            addr		= data[k].addr
-            for i in range( len( values )):
-                stepdata[addr-STEP_DATA_BEG+i] = values[i]
-        unit.write( STEP_DATA_BEG, stepdata )
+            logging.normal( "Position: actuator %3d updated: %16s: %8s (== %s)", actuator, k, v, values )
+            unit.write( data[k].addr, values )
 
         # 5: set operation_start to 0x0100 (1 in high-order bytes) unless 'noop'
         if not noop:

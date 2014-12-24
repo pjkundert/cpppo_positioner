@@ -256,10 +256,11 @@ def main( argv=None, idle_service=None, **kwds ):
             inp			= ''
         if not inp:
             continue
+        # A non-empty non-comment input in 'inp'; parse it as JSON into 'dat'; allow numeric and dict
 
         if gateway and logging.getLogger().isEnabledFor( logging.NORMAL ):
             logging.normal( "%r", gateway )
-        # A non-empty non-comment input in 'inp'; parse it as JSON into 'dat'; allow numeric and dict
+
         try:
             dat			= json.loads( inp )
         except Exception as exc:
@@ -269,13 +270,17 @@ def main( argv=None, idle_service=None, **kwds ):
             logging.normal( "Delaying: %7.3fs", dat )
             time.sleep( dat )
             continue
-        if not isinstance( dat, dict ):
-            logging.warning( "Unknown position type: %s: %r", type( dat ), dat )
+        elif isinstance( dat, dict ):
+            # A position dict in 'dat'; attempt to position to it.  We'll wait forever to establish a
+            # connection to the gateway, and then attempt each positioning command until it succeeds.
+            logging.normal( "Position: actuator %3s parsed ; params: %r", dat.get( 'actuator', 'N/A' ), dat )
+        elif isinstance( dat, list ) and dat and isinstance( dat[0], int ):
+            # An [ <actuator>, "FLAG", "flag", ... ] 
+            logging.normal( "Outputs : actuator %3s parsed ; params: %r", dat[0], dat[1:] )
+        else:
+            logging.warning( "Unknown command: %s: %r", type( dat ), dat )
             continue
 
-        # A position dict in 'dat'; attempt to position to it.  We'll wait forever to establish a
-        # connection to the gateway, and then attempt each positioning command until it succeeds.
-        logging.normal( "Position: actuator %3s parsed ; params: %r", dat.get( 'actuator', 'N/A' ), dat )
         count		       += 1
         while success < count:
             if not gateway:
@@ -289,19 +294,25 @@ def main( argv=None, idle_service=None, **kwds ):
                     time.sleep( 1 ) # avoid tight loop on connection failures
                     continue
 
-            # Have a gateway; issue the positioning command, discarding the Gateway on failure and
+            # Have a gateway; issue the set/position command, discarding the Gateway on failure and
             # looping; otherwise, fall thru after success (gateway is Truthy) and get next command.
             # A positioning command with no position data (eg. only actuator and/or timeout) should
             # just confirm that the previous positioning operation is complete.
             try:
-                status		= gateway.position( **dat )
+                if isinstance( dat, list ):
+                    status	= gateway.outputs( *dat )
+                else:
+                    status	= gateway.position( **dat )
                 success	       += 1
-                logging.normal(  "Position: actuator %3s success; status: %r", dat.get( 'actuator', 'N/A' ), status )
+                logging.normal(  "Success : actuator %3s status: %r\n%r", 
+                                 dat[0] if isinstance( dat, list ) else dat.get( 'actuator', 'N/A' ),
+                                 status, gateway )
             except Exception as exc:
-                logging.warning( "Position: actuator %3s failure; params: %r; %s\n%s", dat.get( 'actuator', 'N/A' ),
-                                 dat, exc, traceback.format_exc() )
+                logging.warning( "Failure : actuator %3s raised : %s\n%r\n%s\n%r",
+                                 dat[0] if isinstance( dat, list ) else dat.get( 'actuator', 'N/A' ),
+                                 exc, dat, traceback.format_exc(), gateway )
                 gateway.close()
                 gateway		= None
-        
-    logging.normal( "Completed %d/%d actuator positions in %7.3fs", success, count, cpppo.timer() - start )
+
+    logging.normal( "Completed %d/%d actuator commands in %7.3fs", success, count, cpppo.timer() - start )
     return 0 if success == count else 1
