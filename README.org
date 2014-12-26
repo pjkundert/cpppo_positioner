@@ -39,6 +39,24 @@
     : from cpppo_positioner import smc
     : gateway		= smc.smc_modbus()
 
+    | keyword  | description                                                     |
+    |----------+-----------------------------------------------------------------|
+    | address  | The serial port device address, default /dev/ttyS1              |
+    | timeout  | The RS-485 I/O timeout, default .1s                             |
+    | baudrate | Default 38,400                                                  |
+    | stopbits | Default 1                                                       |
+    | bytesize | Default 8                                                       |
+    | parity   | Default is no parity                                            |
+    | rate     | Adjust to optimize load, RS-485 capacity, latency, default .25s |
+
+    Nothing will be polled until the first attempt to interact with an
+    actuator.   Once an actuator is identified, the =smc_modbus= class will
+    attempt to poll it at the specified =rate=
+
+    If an operation raises an Exception, it is expected that you will discard
+    the instance and create a new one.
+
+
 *** =.position= -- Complete operation, Initiate new position
     
     The .position method checks that any current position operation is complete,
