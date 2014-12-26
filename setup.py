@@ -20,9 +20,11 @@ setup(
     install_requires		= install_requires,
     packages			= [ 
         "cpppo_positioner",
+        "cpppo_positioner/remote",
     ],
     package_dir			= {
         "cpppo_positioner":		".", 
+        "cpppo_positioner/remote":	"./remote",
     },
     entry_points		= {
         'console_scripts': 	console_scripts,
