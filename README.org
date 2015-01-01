@@ -1,15 +1,47 @@
 * SMC Actuator Position Control via Modbus/RTU
 
+  SMC produces a wide variety of [[http://www.smcworld.com/actuator/en/][Electric Actuators]].  These are controllable via
+  [[http://www.smcworld.com/actuator/en/gateway.jsp][Gateway Units]], providing access several protocols such as DeviceNet,
+  EtherNet/IP and ProfiBus.
+
+** SMC Actuator and Gateway Protocol
+
+  The underlying protocol spoken by the SMC Actuators themselves (and all the
+  SMC Gateways) is simply Modbus/RTU, over an RS-485 serial multi-drop network.
+
+  Using =cpppo_positioner=, you can access multiple SMC electric actuators, and:
+  - issue multiple positioning operations simultaneously
+  - monitor any positioning operation for completion
+  - set and clear any positioner outputs
+  - monitor all status flags
+
   The =cpppo_positioner= module allows control of the position of a set of
-  actuators by initiating a communication channel and issuing new position
-  directives via each actuator controller.  The current state is polled as
-  necessary via Modbus/RTU reads, and data updates and state changes are
-  performed via Modbus/RTU writes.
+  actuators by initiating an RS-485 communication channel and issuing new
+  position directives via each actuator's on-board controller.  The current
+  state is polled as necessary via Modbus/RTU reads, and data updates and state
+  changes are performed via Modbus/RTU writes.
+
+** Communication Limits and Hardware
+
+   The recommended hardware platform is the Lanner LEC-3013 industrial
+   solid-state PC, which can be configured with up to 8 RS-485 ports, and
+   communicate with up to 12 actuators per port (to minimize polling latency).
+   In addition, the SMC LEC-W2 "Controller setting kit" comes with a USB-RS485
+   cable which may be used to communicate with additional actuators.
+
+   A custom harness is available with the the custom SMC RJ45 plug to RS-485
+   serial wiring, and an Emergency Stop button.  One is required for each
+   separate RS-485 connection (up to 12 actuators).
+
+   Therefore, as many as 100 SMC actuators could be controlled by a single
+   =cpppo_positioner= installation running on a Lanner LEC-3013.  If low latency
+   (time to detect status changes) is not required, controlling even more than
+   100 actuators may be possible.
 
 ** Installing
 
-   Cpppo_positioner requires =pymodbus= version 1.3.0; unfortunately,
-   this requires you to install it from source:
+   Cpppo_positioner requires =pymodbus= version 1.3.0; this requires you to
+   install it from source:
    : $ git clone git@github.com:bashwork/pymodbus.git
    : $ cd pymodbus
    : $ python setup.py install
@@ -55,7 +87,6 @@
 
     If an operation raises an Exception, it is expected that you will discard
     the instance and create a new one.
-
 
 *** =.position= -- Complete operation, Initiate new position
     
@@ -107,6 +138,10 @@
 
 *** =.complete= -- Check for completion
 
+    Confirms that any previous actuator positioning operation is complete, by
+    monitoring the BUSY flag (not the INP flag, as erroneously indicated by the
+    LEC Modbus RTU op Manual.pdf documentation).
+
     If you wish, you may invoke the =.complete= method directly (instead of
     implicitly at the beginning of every =.position= invocation).
 
@@ -116,7 +151,7 @@
     | timeout  | Allowed number of seconds to complete (forever if None) |
     | svoff    | If positioning complete, turn off servo                 |
 
-    To check for completion and disable servo within timeout of 3 seconds:
+    To check for completion and then disable servo within timeout of 3 seconds:
     : complete( actuator=1, svoff=True, timeout=3 )
 
 *** =.outputs= -- Set/clear outputs (Coils)
@@ -136,7 +171,6 @@
     | JOG\_MINUS     |             |
     | JOG\_PLUS      |             |
     | INPUT\_INVALID |             |
-
 
 *** =.status= -- Return full status and position data
 

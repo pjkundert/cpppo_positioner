@@ -340,17 +340,21 @@ class smc_modbus( modbus_client_rtu ):
     def complete( self, actuator=1, svoff=False, timeout=None ):
         """Ensure that any prior operation on the actuator is complete w/in timeout; return True iff the
         current operation is detected as being complete.
+
+        According to the documentation, the absence of the X4B "INP" flag should indicate
+        completion, (see LEC Modbus RTU op Manual.pdf, section 4.4).  However, this does not work,
+        and the X48 "BUSY" flag seems to serve this purpose; perhaps it is a documentation error.
     
-        If 'svoff' is True, we'll turn off the servo (clear Y19_SVON) if we detect completion.
+        If 'svoff' is True, we'll also turn off the servo (clear Y19_SVON) if we detect completion.
 
         """
         begin			= cpppo.timer()
         if timeout is None:
             timeout		= self.TIMEOUT
         unit			= self.unit( uid=actuator )
-        # Loop on True/None; terminate only on False; X4B_INP contains 0/False when complete
+        # Loop on True/None; terminate only on False; X48_BUSY contains 0/False when complete
         complete		= self.check(
-            predicate=lambda: unit.read( data.X4B_INP.addr ) == False,
+            predicate=lambda: unit.read( data.X48_BUSY.addr ) == False,
             deadline=None if timeout is None else begin + timeout )
         ( logging.warning if not complete else logging.detail )(
             "Complete: actuator %3d %s", actuator, "success" if complete else "failure" )
