@@ -1,24 +1,35 @@
-* SMC Actuator Position Control via Modbus/RTU
+* Control SMC Electric Actuators from Python
 
   SMC produces a wide variety of [[http://www.smcworld.com/actuator/en/][Electric Actuators]].  These are controllable via
-  [[http://www.smcworld.com/actuator/en/gateway.jsp][Gateway Units]], providing access several protocols such as DeviceNet,
-  EtherNet/IP and ProfiBus.
+  [[http://www.smcworld.com/actuator/en/gateway.jsp][Gateway Units]], providing access via several industrial protocols such as
+  DeviceNet, EtherNet/IP and ProfiBus.
+
+  These protocols are typically accessed using industrial control software
+  and devices such as PLCs.
+
+  To control your SMC actuators directly from a Python program, you can skip the
+  SMC Gateway, and directly access the actuator Controller using its native
+  protocol.  You can reduce the expense of your installation by eliminating the
+  SMC Gateway, and you can run your own Python software on the same industrial
+  computer used to communicate with the SMC actuator Controllers.
 
 ** SMC Actuator and Gateway Protocol
 
-  The underlying protocol spoken by the SMC Actuators themselves (and all the
-  SMC Gateways) is simply Modbus/RTU, over an RS-485 serial multi-drop network.
+  The underlying protocol spoken by the SMC Electric Actuator Controllers
+  themselves (and also the associated SMC Gateways) is simply Modbus/RTU, over
+  an RS-485 serial multi-drop network.
 
-  Using =cpppo_positioner=, you can access multiple SMC electric actuators, and:
-  - issue multiple positioning operations simultaneously
+  Using =cpppo_positioner=, you can directly access multiple SMC electric
+  actuator controllers (*without* an SMC Gateway), and:
+  - issue multiple positioning operations in progress simultaneously
   - monitor any positioning operation for completion
-  - set and clear any positioner outputs
-  - monitor all status flags
+  - set and clear any actuator Controller outputs
+  - monitor all Controller status flags
 
   The =cpppo_positioner= module allows control of the position of a set of
-  actuators by initiating an RS-485 communication channel and issuing new
-  position directives via each actuator's on-board controller.  The current
-  state is polled as necessary via Modbus/RTU reads, and data updates and state
+  actuators by initiating a connection to the RS-485 communication channel and
+  issuing new position directives via each actuator's controller.  The current
+  state is continuously polled via Modbus/RTU reads, and data updates and state
   changes are performed via Modbus/RTU writes.
 
 ** Communication Limits and Hardware
