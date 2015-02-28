@@ -20,11 +20,9 @@ setup(
     install_requires		= install_requires,
     packages			= [ 
         "cpppo_positioner",
-        "cpppo_positioner/remote",
     ],
     package_dir			= {
         "cpppo_positioner":		".", 
-        "cpppo_positioner/remote":	"./remote",
     },
     entry_points		= {
         'console_scripts': 	console_scripts,
@@ -32,15 +30,16 @@ setup(
     include_package_data	= True,
     author			= "Perry Kundert",
     author_email		= "perry@hardconsulting.com",
-    description			= "Actuator position control via EtherNet/IP",
+    description			= "Actuator position control via native RS485 serial Modbus/RTU",
     long_description		= """\
-Control SMC positioning actuators via the LEC-GEN1 EtherNet/IP CIP Gateway.
+Control SMC positioning actuators via native RS485 serial Modbus/RTU protocol
 """,
-    license			= "GPLv3",
+    license			= "Dual License; GPLv3 and Proprietary",
     keywords			= "SMC position actuator controller EtherNet/IP",
     url				= "https://github.com/pjkundert/cpppo_positioner",
     classifiers			= [
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+        "License :: Other/Proprietary License",
         "Programming Language :: Python :: 2.6",
         "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3.3",

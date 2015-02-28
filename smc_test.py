@@ -7,7 +7,7 @@ import pytest
 import cpppo
 
 import smc
-from .serial_test import start_modbus_simulator, RTU_TIMEOUT, await
+from cpppo.modbus_test import start_modbus_simulator
 
 def simulated_actuator( tty, slaves ):
     """Start a simulator on a serial device PORT_SLAVE, reporting as the specified slave(s) (any slave
@@ -35,7 +35,7 @@ def simulated_actuator( tty, slaves ):
             'parity':   smc.PORT_PARITY,
             'baudrate': smc.PORT_BAUDRATE,
             'slaves':	slaves,
-            'timeout':  RTU_TIMEOUT, # TODO: implement meaningfully; basically ignored
+            'timeout':  0.1, # TODO: implement meaningfully; basically ignored
             'ignore_missing_slaves': True,
         } )
     ] )
