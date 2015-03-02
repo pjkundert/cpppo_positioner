@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 # 
 # Cpppo_positioner -- Actuator position control
@@ -33,15 +34,11 @@ __email__                       = "perry@hardconsulting.com"
 __copyright__                   = "Copyright (c) 2014 Hard Consulting Corporation"
 __license__                     = "Dual License: GPLv3 (or later) and Commercial (see LICENSE)"
 
-import logging
-import struct
 import sys
-import threading
-import time
 import os
 import json
 
-import cpppo
+from cpppo.bin.modbus_sim import main, context
 
 if __name__ == "__main__" and __package__ is None:
     # Ensure that importing works (whether cpppo_positioner installed or not) with:
@@ -49,14 +46,13 @@ if __name__ == "__main__" and __package__ is None:
     #   ./cpppo_positioner/simulator.py ...
     #   ./simulator.py ...
     __package__			= "cpppo_positioner"
-    try:
-        import cpppo_positioner
-    except ImportError:
-        # 
-        sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath( __file__ ))))
 
-from cpppo_positioner.bin.modbus_sim import main, context
-from cpppo_positioner import smc
+try:
+    from cpppo_positioner import smc
+except ImportError:
+    sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath( __file__ ))))
+    from cpppo_positioner import smc
+
 
 if __name__ == "__main__": 
 

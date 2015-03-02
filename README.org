@@ -245,6 +245,10 @@
     }
     #+END_EXAMPLE
 
+*** =.close= -- Terminate polling of serial port, close device
+
+    Ceases I/O to all actuators on RS485 circuit and releases the serial device.
+
 *** Command- or Pipe-line usage
 
     An executable module entry point (=python -m cpppo_positioner=), and a
@@ -284,7 +288,7 @@
 
      Note that on Windows Cmd or Powershell, it is very difficult to quote
      double-quote characters in strings.  In Powershell, you need to use the
-     bash-slash + back-tick before each double-quote.  Unexpectedly,
+     back-slash + back-tick before each double-quote.  Unexpectedly,
      using a single-quoted string does *not* allow you to contain double-quotes.
      
      You can get double quotes into a string:
@@ -315,5 +319,5 @@
    Ensure that either you have installed the cpppo_positioner, *or* are in the
    directory containing the cloned cpppo_positioner repository): To simulate an
    SMC positioning actuator 1 on /dev/ttyS0:
-   : $ python -m cpppo_positioner.simulator -v /dev/ttyS0 1
+   : $ python -m cpppo_positioner.simulator /dev/ttyS0 1
 

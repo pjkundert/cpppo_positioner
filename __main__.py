@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 # 
 # Cpppo_positioner -- Actuator position control via EtherNet/IP
@@ -29,16 +30,14 @@ import os
 
 if __name__ == "__main__" and __package__ is None:
     # Ensure that importing works (whether cpppo_positioner installed or not) with:
-    #   python -m cpppo_positioner.simulator ...
-    #   ./cpppo_positioner/simulator.py ...
-    #   ./simulator.py ...
+    #   python -m cpppo_positioner ...
+    #   ./cpppo_positioner/__main__.py ...
+    #   ./__main__.py ...
     __package__			= "cpppo_positioner"
-    try:
-        import cpppo_positioner
-    except ImportError:
-        # 
-        sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath( __file__ ))))
-
-from cpppo_positioner.main import main
+try:
+    from cpppo_positioner.main import main
+except ImportError:
+    sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath( __file__ ))))
+    from cpppo_positioner.main import main
 
 sys.exit( main() )
