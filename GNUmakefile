@@ -77,6 +77,11 @@ clean:
 	rm -f MANIFEST *.png $(shell find . -name '*.pyc' )
 	rm -rf build dist auto __pycache__ *.egg-info
 
+analyze:
+	flake8 -j 1 --max-line-length=110                                       \
+	  --ignore=E221,E201,E202,E203,E223,E225,E226,E231,E241,E242,E261,E272,E302,W503,E701,E702,E,W  \
+	  --exclude="__init__.py" \
+	  .
 
 # Run only tests with a prefix containing the target string, eg test-blah
 test-%:

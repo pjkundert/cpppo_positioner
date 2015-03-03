@@ -1,2 +1,2 @@
-cpppo>=3.0.0
+cpppo>=3.5.0
 pymodbus>=1.3.0

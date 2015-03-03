@@ -33,8 +33,8 @@ import time
 import cpppo
 import serial
 
-from cpppo_positioner.remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
-from cpppo_positioner.remote.plc_modbus import poller_modbus
+from cpppo.remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
+from cpppo.remote.plc_modbus import poller_modbus
 
 from pymodbus.constants import Defaults
 
