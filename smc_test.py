@@ -8,11 +8,11 @@ import cpppo
 from cpppo.modbus_test import start_modbus_simulator
 from cpppo.tools import await
 
-'''
+
 import logging
 cpppo.log_cfg['level']		= logging.DETAIL
 logging.basicConfig( **cpppo.log_cfg )
-'''
+
 
 def simulated_actuator( tty, slaves ):
     """Start a simulator on a serial device PORT_SLAVE, reporting as the specified slave(s) (any slave
@@ -96,9 +96,10 @@ def test_smc_basic( simulated_actuator_1, simulated_actuator_2 ):
     '''
     positioner.close()
 
-def test_smc_position( simulated_actuator_1 ):
+def test_smc_position( simulated_actuator_1, simulated_actuator_2 ):
 
     command,address		= simulated_actuator_1
+    command,address		= simulated_actuator_2
 
     positioner			= smc.smc_modbus()
 
@@ -120,5 +121,5 @@ def test_smc_position( simulated_actuator_1 ):
     '''
     status			= positioner.position( actuator=1, timeout=5 )
 
-    assert status['X4B_INP'] == False, "Should have detected positioning complete: %r" % ( status )
+    assert status['X48_BUSY'] == False, "Should have detected positioning complete: %r" % ( status )
     positioner.close()
