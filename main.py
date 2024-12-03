@@ -49,7 +49,7 @@ import traceback
 import cpppo
 
 # The default address to connect to.  For serial-connected devices, probably a
-# serial port like /dev/ttyS1.
+# serial port like /dev/ttyS0 or /dev/tty.usbserial-B0019I24.
 address				= '/dev/ttyS1'
 
 
@@ -286,9 +286,9 @@ def main( argv=None, idle_service=None, **kwds ):
             if not gateway:
                 try:
                     gateway	= gateway_class( address=args.address, timeout=args.timeout, **gateway_config )
-                    logging.normal( "Gateway:  %s connected", address )
+                    logging.normal( "Gateway:  %s connected", args.address )
                 except Exception as exc:
-                    logging.warning("Gateway:  %s connection failed: %s; %s", address,
+                    logging.warning("Gateway:  %s connection failed: %s; %s", args.address,
                                     exc, traceback.format_exc() if gateway is None else "" )
                     gateway	= False
                     time.sleep( 1 ) # avoid tight loop on connection failures

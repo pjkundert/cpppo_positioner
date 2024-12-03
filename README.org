@@ -316,8 +316,9 @@
    is implemented for testing purposes.  To use, disconnect the SMC actuators,
    and re-connect the Lanner's loop-back plug to the RS-485 harness RJ45 socket.
 
-   Ensure that either you have installed the cpppo_positioner, *or* are in the
-   directory containing the cloned cpppo_positioner repository): To simulate an
-   SMC positioning actuator 1 on /dev/ttyS0:
-   : $ python -m cpppo_positioner.simulator /dev/ttyS0 1
+   Ensure that either you have installed the cpppo_positioner, *or* are in the directory containing
+   the cloned cpppo_positioner repository): To simulate an SMC positioning actuator 1 on ttyS1 (a
+   symbolic link in the current directory to the actual RS-485 serial interface in /dev,
+   eg. =/dev/tty.usbserial-B0019I24=):
+   : $ python -m cpppo_positioner.simulator ttyS1 1
 

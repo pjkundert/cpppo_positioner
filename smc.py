@@ -38,7 +38,7 @@ from cpppo.remote.plc_modbus import poller_modbus
 
 from pymodbus.constants import Defaults
 
-PORT_MASTER			= '/dev/ttyS1'
+PORT_MASTER			= 'ttyS0'  # eg. a symbolic link ttyS0 -> /dev/tty.usbserial-B0019I24
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
@@ -63,19 +63,20 @@ data				= cpppo.dotdict()
 # When Write
 # Gives instructions to controller.
 # Only valid when in serial driving mode.
-# (ON: 1, OFF: 0) 
+# (ON: 1, OFF: 0)
+# Coils are indexed from int('00001')
 data.Y10_IN0			= {}
-data.Y10_IN0.addr		= 00001 + 0x10 # == 17
+data.Y10_IN0.addr		= 1 + 0x10 # == 17
 data.Y11_IN1			= {}
-data.Y11_IN1.addr		= 00001 + 0x11
+data.Y11_IN1.addr		= 1 + 0x11
 data.Y12_IN2			= {}
-data.Y12_IN2.addr		= 00001 + 0x12
+data.Y12_IN2.addr		= 1 + 0x12
 data.Y13_IN3			= {}
-data.Y13_IN3.addr		= 00001 + 0x13
+data.Y13_IN3.addr		= 1 + 0x13
 data.Y14_IN4			= {}
-data.Y14_IN4.addr		= 00001 + 0x14
+data.Y14_IN4.addr		= 1 + 0x14
 data.Y15_IN5			= {}
-data.Y15_IN5.addr		= 00001 + 0x15
+data.Y15_IN5.addr		= 1 + 0x15
 
 # When Read
 # Displays the instruction state when in serial driving mode.
@@ -85,21 +86,21 @@ data.Y15_IN5.addr		= 00001 + 0x15
 # Only valid when in serial driving mode.
 # (ON: 1, OFF: 0)
 data.Y18_HOLD			= {}
-data.Y18_HOLD.addr		= 00001 + 0x18
+data.Y18_HOLD.addr		= 1 + 0x18
 data.Y19_SVON			= {}
-data.Y19_SVON.addr		= 00001 + 0x19
+data.Y19_SVON.addr		= 1 + 0x19
 data.Y1A_DRIVE			= {}
-data.Y1A_DRIVE.addr		= 00001 + 0x1a
+data.Y1A_DRIVE.addr		= 1 + 0x1a
 data.Y1B_RESET			= {}
-data.Y1B_RESET.addr		= 00001 + 0x1b
+data.Y1B_RESET.addr		= 1 + 0x1b
 data.Y1C_SETUP			= {}
-data.Y1C_SETUP.addr		= 00001 + 0x1c
+data.Y1C_SETUP.addr		= 1 + 0x1c
 # Move to -'ve direction by JOG operation. (1: move, 2: stop) 
 data.Y1D_JOG_MINUS		= {}
-data.Y1D_JOG_MINUS.addr		= 00001 + 0x1d
+data.Y1D_JOG_MINUS.addr		= 1 + 0x1d
 # Move to +'ve direction by JOG operation. (1: move, 2: stop) 
 data.Y1E_JOG_PLUS		= {}
-data.Y1E_JOG_PLUS.addr		= 00001 + 0x1e
+data.Y1E_JOG_PLUS.addr		= 1 + 0x1e
 
 # The driving input mode (parallel/ serial) is switched in Y30.
 # 
@@ -110,7 +111,7 @@ data.Y1E_JOG_PLUS.addr		= 00001 + 0x1e
 # continued. Conversely, when Y30 is specified from 1 to 0, the state of the parallel input terminal
 # is reflected immediately.
 data.Y30_INPUT_INVALID		= {}
-data.Y30_INPUT_INVALID.addr	= 00001 + 0x30 # == 49 (round up to 0x3f == 64)
+data.Y30_INPUT_INVALID.addr	= 1 + 0x30 # == 49 (round up to 0x3f == 64)
 
 
 # X Discrete Inputs Internal Flags (status flags).  Read only.
@@ -266,7 +267,7 @@ class smc_modbus( modbus_client_rtu ):
         dictionary.  Will return None for any values not yet polled (or when communications fails).
 
         """
-    	unit			= self.unit( uid=actuator )
+        unit			= self.unit( uid=actuator )
         result			= {}
         for k in super( cpppo.dotdict, data ).keys(): # Use dict key iteration, rather than dotdict full-depth keys
             addr		= data[k].addr

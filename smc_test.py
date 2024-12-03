@@ -3,11 +3,11 @@ import time
 
 import pytest
 
-import smc
 import cpppo
 from cpppo.modbus_test import start_modbus_simulator
-from cpppo.tools import await
+from cpppo.tools import waits
 
+from . import smc
 
 import logging
 cpppo.log_cfg['level']		= logging.DETAIL
@@ -110,14 +110,14 @@ def test_smc_position( simulated_actuator_1, simulated_actuator_2 ):
     '''
     # Cannot write Status (read-only)...
     unit.write( smc.data.X4B_INP.addr, True ) # Positioning incomplete
-    await.waitfor( positioner.status()['X4B_INP'] is True, "positioner polled", timeout=1 )
+    waits.waitfor( positioner.status()['X4B_INP'] is True, "positioner polled", timeout=1 )
     try:
         status			= positioner.position( actuator=1, timeout=.1 )
         assert False, "Should have failed to detect positioning completion"
     except Exception as exc:
         assert 'failure' in str( exc )
     unit.write( smc.data.X4B_INP.addr, False ) # Positioning complete
-    await.waitfor( positioner.status()['X4B_INP'] is False, "positioner polled", timeout=1 )
+    waits.waitfor( positioner.status()['X4B_INP'] is False, "positioner polled", timeout=1 )
     '''
     status			= positioner.position( actuator=1, timeout=5 )
 
