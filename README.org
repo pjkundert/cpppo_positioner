@@ -1,3 +1,18 @@
+#+title: cpppo_positioner: SMC Actuator Control via RS-485
+#+author: Perry Kundert
+#+email: perry@kundert.ca
+#+date: 2015-03-03 13:44:44
+#+draft: false
+#+EXPORT_FILE_NAME: README.pdf
+#+STARTUP: org-startup-with-inline-images inlineimages
+#+STARTUP: org-latex-tables-centered nil
+#+OPTIONS: ^:nil # Disable sub/superscripting with bare _; _{...} still works
+#+OPTIONS: toc:nil
+
+#+PROPERTY: header-args :exports both :results output
+
+#+LATEX_HEADER: \usepackage[margin=1.333in]{geometry}
+
 * Control SMC Electric Actuators from Python
 
   SMC produces a wide variety of [[http://www.smcworld.com/actuator/en/][Electric Actuators]].  These are controllable via
@@ -51,7 +66,7 @@
 
 ** Installing
 
-   Cpppo_positioner requires =pymodbus= version 1.3.0; this requires you to
+   Cpppo_positioner requires =pymodbus= version 3.8.0; this requires you to
    install it from source:
    : $ git clone git@github.com:bashwork/pymodbus.git
    : $ cd pymodbus
@@ -119,18 +134,18 @@
     
     | keyword        | units  |              description |
     |----------------+--------+--------------------------|
-    | movement\_mode |        | 1: absolute, 2: relative |
+    | movement_mode  |        | 1: absolute, 2: relative |
     | speed          | mm/s   |                  1-65535 |
     | position       | .01 mm |            +/-2147483647 |
     | acceleration   | mm/s^2 |                  1-65535 |
     | deceleration   | mm/s^2 |                  1-65535 |
-    | pushing\_force | %      |                    0-100 |
-    | trigger\_level | %      |                    0-100 |
-    | pushing\_speed | mm/s   |                  1-65535 |
-    | moving\_force  | %      |                    0-300 |
-    | area\_1        | .01 mm |            +/-2147483647 |
-    | area\_2        | .01 mm |            +/-2147483647 |
-    | in\_position   | .01 mm |             1-2147483647 |
+    | pushing_force  | %      |                    0-100 |
+    | trigger_level  | %      |                    0-100 |
+    | pushing_speed  | mm/s   |                  1-65535 |
+    | moving_force   | %      |                    0-300 |
+    | area_1         | .01 mm |            +/-2147483647 |
+    | area_2         | .01 mm |            +/-2147483647 |
+    | in_position    | .01 mm |             1-2147483647 |
     
     It is recommended to specify all the values at least for the initial
     positioning; any values not specified in subsequent position calls will not
@@ -179,9 +194,9 @@
     | DRIVE          |             |
     | RESET          |             |
     | SETUP          |             |
-    | JOG\_MINUS     |             |
-    | JOG\_PLUS      |             |
-    | INPUT\_INVALID |             |
+    | JOG_MINUS      |             |
+    | JOG_PLUS       |             |
+    | INPUT_INVALID  |             |
 
 *** =.status= -- Return full status and position data
 
