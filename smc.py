@@ -33,17 +33,16 @@ import time
 import cpppo
 import serial
 
-from cpppo.remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
+from cpppo.remote.pymodbus_fixes import modbus_client_rtu, Defaults
 from cpppo.remote.plc_modbus import poller_modbus
 
-from pymodbus.constants import Defaults
 
 PORT_MASTER			= 'ttyS0'  # eg. a symbolic link ttyS0 -> /dev/tty.usbserial-B0019I24
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
 PORT_BAUDRATE			= 38400
-PORT_TIMEOUT			= 0.1		# RS-485 I/O timeout
+PORT_TIMEOUT			= 0.05		# RS-485 I/O timeout
 
 POLL_RATE			= .25
 
@@ -224,8 +223,8 @@ class smc_modbus( modbus_client_rtu ):
         Defaults.Timeout	= timeout	# RS-485 I/O timeout
 
         super( smc_modbus, self, ).__init__(
-            framer=modbus_rtu_framer_collecting, port=address, stopbits=stopbits, bytesize=bytesize,
-            parity=parity, baudrate=baudrate )
+             port=address, stopbits=stopbits, bytesize=bytesize,
+            parity=parity, baudrate=baudrate, timeout=timeout )
 
         self.pollers		= {} # {unit#: <poller_modbus>,}
         self.rate		= rate
@@ -269,7 +268,9 @@ class smc_modbus( modbus_client_rtu ):
         """
         unit			= self.unit( uid=actuator )
         result			= {}
-        for k in super( cpppo.dotdict, data ).keys(): # Use dict key iteration, rather than dotdict full-depth keys
+
+        # Roughly equivalent to dict key iteration, rather than dotdict full-depth keys            
+        for k in data.iterkeys( depth=0 ):
             addr		= data[k].addr
             format		= data[k].get( 'format' )
             values		= [ unit.read( data[k].addr ) ]
@@ -432,9 +433,9 @@ class smc_modbus( modbus_client_rtu ):
         # writes, so we use multiple register writes for each value.
         for k,v in kwds.items():
             assert k in data, \
-                "Unrecognized positioning keyword: %s == %v" % ( k, v )
+                "Unrecognized positioning keyword: %s == %r" % ( k, v )
             assert STEP_DATA_BEG <= data[k].addr <= STEP_DATA_END, \
-                "Invalid positioning keyword: %s == %v; not within position data address range" % ( k, v )
+                "Invalid positioning keyword: %s == %r; not within position data address range" % ( k, v )
             format		= data[k].get( 'format' )
             if format:
                 # Create a big-endian buffer.  This will be some multiple of register size.  Then,

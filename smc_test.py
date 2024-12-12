@@ -5,7 +5,6 @@ import pytest
 
 import cpppo
 from cpppo.modbus_test import start_modbus_simulator
-from cpppo.tools import waits
 
 from . import smc
 
@@ -13,8 +12,14 @@ import logging
 cpppo.log_cfg['level']		= logging.DETAIL
 logging.basicConfig( **cpppo.log_cfg )
 
+PORT_MASTER			= "ttyS0"
+PORT_SLAVES			= {
+    "ttyS1": [1,3],
+    "ttyS2": [2,4],
+}
 
-def simulated_actuator( tty, slaves ):
+
+def simulated_actuator( tty ):
     """Start a simulator on a serial device PORT_SLAVE, reporting as the specified slave(s) (any slave
     ID, if 'slave' keyword is missing or None); parse whether device successfully opened.  Pass any
     remaining kwds as config options.
@@ -25,9 +30,9 @@ def simulated_actuator( tty, slaves ):
     expects certain delays before/after requests.
 
     """
-    return start_modbus_simulator( options=[
+    return start_modbus_simulator(
         '-vvv', '--log', '.'.join( [
-            'smc_test', 'modbus_sim', 'log', 'actuator_'+'_'.join( map( str, slaves )) ] ),
+            'smc_test', 'modbus_sim', 'log', 'actuator_'+'_'.join( map( str, PORT_SLAVES[tty] )) ] ),
         #'--evil', 'delay:.0-.1',
         '--address', tty,
         '    17 -     64 = 0',	# Coil           0x10   - 0x30   (     1 +) (rounded to 16 bits)
@@ -39,19 +44,26 @@ def simulated_actuator( tty, slaves ):
             'bytesize': smc.PORT_BYTESIZE,
             'parity':   smc.PORT_PARITY,
             'baudrate': smc.PORT_BAUDRATE,
-            'slaves':	slaves,
-            'timeout':  0.1, # TODO: implement meaningfully; basically ignored
+            'slaves':	PORT_SLAVES[tty],
+            'timeout':  smc.PORT_TIMEOUT,
             'ignore_missing_slaves': True,
         } )
-    ] )
-    
-@pytest.fixture( scope="module" )
-def simulated_actuator_1():
-    return simulated_actuator( "/dev/ttyS2", slaves=[1,3] )
+    )
+
 
 @pytest.fixture( scope="module" )
-def simulated_actuator_2():
-    return simulated_actuator( "/dev/ttyS0", slaves=[2,4] )
+def simulated_actuator_1( request ):
+    command,address		= simulated_actuator( "ttyS1" )
+    request.addfinalizer( command.kill )
+    return command,address
+
+
+@pytest.fixture( scope="module" )
+def simulated_actuator_2( request ):
+    command,address		= simulated_actuator( "ttyS2" )
+    request.addfinalizer( command.kill )
+    return command,address
+
 
 def test_smc_basic( simulated_actuator_1, simulated_actuator_2 ):
 
@@ -96,6 +108,7 @@ def test_smc_basic( simulated_actuator_1, simulated_actuator_2 ):
     '''
     positioner.close()
 
+
 def test_smc_position( simulated_actuator_1, simulated_actuator_2 ):
 
     command,address		= simulated_actuator_1
@@ -105,7 +118,7 @@ def test_smc_position( simulated_actuator_1, simulated_actuator_2 ):
 
     # No position data; should just check that previous positioning complete (it will always be
     # complete, because the positioner (simulator) drives Status X4B_INP False)
-    unit			= positioner.unit( uid=1 )
+    unit			= positioner.unit( uid=1 )  # noqa: F841
 
     '''
     # Cannot write Status (read-only)...

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # 
 # Cpppo_positioner -- Actuator position control
@@ -38,7 +38,7 @@ import sys
 import os
 import json
 
-from cpppo.bin.modbus_sim import main, context
+from cpppo.bin.modbus_sim import main
 
 if __name__ == "__main__" and __package__ is None:
     # Ensure that importing works (whether cpppo_positioner installed or not) with:

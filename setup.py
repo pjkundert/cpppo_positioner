@@ -1,7 +1,7 @@
 from setuptools import setup
-import os, sys
+import os
 
-HERE			= os.path.abspath( os.path.dirname( __file__ ))
+HERE				= os.path.abspath( os.path.dirname( __file__ ))
 
 install_requires		= open( os.path.join( HERE, "requirements.txt" )).readlines()
 tests_require			= open( os.path.join( HERE, "requirements-tests.txt" )).readlines()
@@ -39,7 +39,7 @@ packages			= [
 
 setup(
     name			= "cpppo_positioner",
-    version			= __version__,
+    version			= __version__,  # noqa: F821
     install_requires		= install_requires,
     packages			= packages,
     package_dir			= package_dir,

@@ -5,7 +5,6 @@
 # PY[23] is the target Python interpreter.  It must have pytest installed.
 SHELL		= /bin/bash
 
-PY		?= python
 PY2		?= python2
 PY2_V		= $(shell $(PY2) -c "import sys; print('-'.join((next(iter(filter(None,sys.executable.split('/')))),sys.platform,sys.subversion[0].lower(),''.join(map(str,sys.version_info[:2])))))"  )
 PY3		?= python3
@@ -42,13 +41,13 @@ WHEEL		= dist/cpppo_positioner-$(VERSION)-py3-none-any.whl
 # 
 
 # To see all pytest output, uncomment --capture=no
-PYTESTOPTS=-v # --capture=no
+PYTESTOPTS	= -v --capture=no --log-cli-level=23 # 25 NORMAL 23 DETAIL 
 
 # Preferred timezone for tests.  If you change this, then you will probably have
 # to augment history_test.py to include checking for timestamp.local output in
 # your local timezone; See history_test.py test_history_timestamp() for supported
 # zones
-TZ=Canada/Mountain
+TZ		= Canada/Mountain
 
 GHUB_NAME	= cpppo_positioner
 GHUB_REPO	= git@github.com:pjkundert/$(GHUB_NAME).git
@@ -60,8 +59,8 @@ VENV_NAME	= $(GHUB_NAME)-$(VERSION)-$(PY3_V)
 VENV		= $(VENV_DIR)/$(VENV_NAME)
 VENV_OPTS	=
 
-PY2TEST=TZ=$(TZ) $(PY2) -m pytest $(PYTESTOPTS)
-PY3TEST=TZ=$(TZ) $(PY3) -m pytest $(PYTESTOPTS)
+PY2TEST		= TZ=$(TZ) $(PY2) -m pytest $(PYTESTOPTS)
+PY3TEST		= TZ=$(TZ) $(PY3) -m pytest $(PYTESTOPTS)
 
 .PHONY: all test clean FORCE
 all:			help
@@ -76,18 +75,9 @@ help:
 	@echo "  clean			Remove build artifacts"
 
 test:
-	$(PY2TEST) || true
-#	$(PY3TEST) || true
+	$(PY3TEST) || true
+#	$(PY2TEST) || true
 
-install:
-	$(PY2) setup.py install
-#	$(PY3) setup.py install
-
-# Support uploading a new version of cpppo to pypi.  Must:
-#   o advance __version__ number in cpppo/misc.py
-#   o log in to your pypi account (ie. for package maintainer only)
-upload:
-	python setup.py sdist upload
 
 clean:
 	rm -f MANIFEST *.png $(shell find . -name '*.pyc' )
@@ -153,12 +143,12 @@ nix-%:
 
 # Run only tests with a prefix containing the target string, eg test-blah
 test-%:
-	$(PY2TEST) *$*_test.py
-#	$(PY3TEST) *$*_test.py
+	$(PY3TEST) *$*_test.py
+#	$(PY2TEST) *$*_test.py
 
 unit-%:
-	$(PY2TEST) -k $*
-#	$(PY3TEST) -k $*
+	$(PY3TEST) -k $*
+#	$(PY2TEST) -k $*
 
 
 #
