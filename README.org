@@ -66,21 +66,23 @@
 
 ** Installing
 
-   Cpppo_positioner requires =pymodbus= version 3.8.0; this requires you to
-   install it from source:
-   : $ git clone git@github.com:bashwork/pymodbus.git
-   : $ cd pymodbus
-   : $ python setup.py install
+   Cpppo_positioner requires =pymodbus= version 3.8.0+.  Until =pymodbus= integrates some fixes, it
+   will *not* support RS-485 multi-drop; polling or writing multiple RS-485 servers (devices) from a
+   single client will not work!  Install [[https://github.com/pjkundert/pymodbus/tree/fix/decode]] if
+   RS-485 multi-drop support is required.
 
-   Clone the =cpppo_positioner.git= repository, and run the setup.py installer:
+   Clone the =cpppo_positioner.git= repository:
    : $ git clone git@github.com:pjkundert/cpppo_positioner.git
    : $ cd cpppo_positioner
-   : $ python setup.py install
-   : $ python
-   : Python 2.7.6 (default, Sep  9 2014, 15:04:36)
-   : [GCC 4.2.1 Compatible Apple LLVM 6.0 (clang-600.0.39)] on darwin
-   : Type "help", "copyright", "credits" or "license" for more information.
-   : >>> from cpppo_positioner import smc
+
+   Obtain a Python 3.9+ interpreter, and create and enable a Python virtual environment (uses
+   =venv=) containing the =cpppo_positioner= module:
+   : make venv
+
+   Alternatively, set up your own Python3 installation that allows =pip= installs, and:
+   : $ python3 -m pip install .
+   : $ python3
+   : >>> from cpppo_positioner import smc_modbus
    : >>>
 
 ** Positioning
@@ -95,12 +97,12 @@
     be specified as keyword arguments.  See =cpppo_positioner/smc.py= for
     details.
     : from cpppo_positioner import smc
-    : gateway		= smc.smc_modbus()
+    : gateway		= smc.smc_modbus()  # Assumes "ttyS0" is the Modbus device
 
     | keyword  | description                                                     |
     |----------+-----------------------------------------------------------------|
-    | address  | The serial port device address, default /dev/ttyS1              |
-    | timeout  | The RS-485 I/O timeout, default .1s                             |
+    | address  | The serial port device address, default "ttyS1"                 |
+    | timeout  | The RS-485 I/O timeout, default .05s                            |
     | baudrate | Default 38,400                                                  |
     | stopbits | Default 1                                                       |
     | bytesize | Default 8                                                       |
@@ -335,5 +337,5 @@
    the cloned cpppo_positioner repository): To simulate an SMC positioning actuator 1 on ttyS1 (a
    symbolic link in the current directory to the actual RS-485 serial interface in /dev,
    eg. =/dev/tty.usbserial-B0019I24=):
-   : $ python -m cpppo_positioner.simulator ttyS1 1
+   : $ python -m cpppo_positioner.simulator --address ttyS1 --actuator 1
 

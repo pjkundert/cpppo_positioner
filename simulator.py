@@ -61,13 +61,13 @@ if __name__ == "__main__":
     # Find the SMC Simulator related arguments, and pull them out of the sys.argv list
     
     # The first argument must be a device
-    device			= ''
-    if '--device' in sys.argv:
-        i			= sys.argv.index( '--device' )
+    address			= ''
+    if '--address' in sys.argv:
+        i			= sys.argv.index( '--address' )
         sys.argv.pop( i )
-        device			= sys.argv.pop( i )
+        address			= sys.argv.pop( i )
     elif len( sys.argv ) > 1:
-        device			= sys.argv.pop( 1 )
+        address			= sys.argv.pop( 1 )
         
     # The actuator number(s) assigned to this simulator.
     actuators			= []
@@ -80,8 +80,8 @@ if __name__ == "__main__":
             actuators.append( int( sys.argv.pop( 1 )))
         else:
             break
-    assert device, \
-        "Must supply a serial port --device name, eg. /dev/ttyS0"
+    assert address, \
+        "Must supply a serial port --address name, eg. /dev/ttyS0"
     assert actuators, \
         "Must supply 1 or more --actuator <id> numbers, eg 1"
 
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     argv			= [
         '-vvv', '--log', '.'.join( [
             'simulator', 'log', 'actuator_'+'_'.join( map( str, actuators )) ] ),
-        '--address', device,
+        '--address', address,
         '    17 -     64 = 0',	# Coil           0x10   - 0x30   (     1 +) (rounded to 16 bits)
         ' 10065 -  10080 = 0',	# Discrete Input 0x40   - 0x4F   ( 10001 +)
         ' 76865 -  77138 = 0',	# Holding Regs   0x9000 - 0x9111 ( 40001 +)
@@ -100,7 +100,7 @@ if __name__ == "__main__":
             'parity':   smc.PORT_PARITY,
             'baudrate': smc.PORT_BAUDRATE,
             'slaves':	actuators,
-            'timeout':  0.5, # TODO: implement meaningfully; basically ignored
+            'timeout':  smc.PORT_TIMEOUT,
             'ignore_missing_slaves': True,
         } )
     ]

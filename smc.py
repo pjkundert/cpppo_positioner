@@ -36,6 +36,10 @@ import serial
 from cpppo.remote.pymodbus_fixes import modbus_client_rtu, Defaults
 from cpppo.remote.plc_modbus import poller_modbus
 
+#
+# All the defaults supplied to smc_modbus().
+# - Either modify these globals before invoking, or pass appropriate parameters
+# 
 
 PORT_MASTER			= 'ttyS0'  # eg. a symbolic link ttyS0 -> /dev/tty.usbserial-B0019I24
 PORT_STOPBITS			= 1
@@ -331,9 +335,9 @@ class smc_modbus( modbus_client_rtu ):
         for f in flags:
             NAM			= f.upper()
             nam			= f.lower()
-            key			= [ k for k in super( cpppo.dotdict, data ).keys()
+            key			= [ k for k in data.iterkeys( depth=0 )
                                     if k.startswith( 'Y' ) and k.endswith( NAM ) ]
-            assert len( key ) == 1 and f in (NAM,nam), "invalid/ambiguous key name %s" % ( f )
+            assert len( key ) == 1 and f in (NAM,nam), "invalid/ambiguous key name %s: %r" % ( f, key )
             val			= bool( f == NAM )
             logging.detail( "%s/%-8s <== %s", unit.description, f, val )
             unit.write( data[key[0]].addr, val )
