@@ -79,6 +79,30 @@
 1.3 Installing
 ──────────────
 
+  Install a Python 3.9+ installation of your choice to run code using
+  `cpppo_positioner'.  It is recommended that you don't install this (or
+  /any/) Python packages globally; create a Python `venv' virtual
+  environment:
+
+  ┌────
+  │ $ python3 -m venv SMC-Project
+  │ $ . ./SMC-Project/bin/activate
+  │ $ (SMC-Project) $ python3 -m pip install cpppo-positioner
+  └────
+
+
+  Note that the PyPI module name for the `cpppo_positioner' module is:
+  `cpppo-positioner' (a dash, not an underscore).  This is the PyPI
+  convention for any Python module containing underscores.
+
+  Now, every time you wish to use your Python 3 + `cpppo_positioner',
+  activate the `venv' before attempting to run your Python code that
+  attempts to import and use `cpppo_positioner'.
+
+
+1.3.1 From Source
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
   Cpppo_positioner requires `pymodbus' version 3.8.0+.  Until `pymodbus'
   integrates some fixes, it will *not* support RS-485 multi-drop;
   polling or writing multiple RS-485 servers (devices) from a single
@@ -118,7 +142,25 @@
   actuators.
 
 
-1.4.1 `smc.smc_modbus'
+1.4.1 RS-485 I/O Device Setup
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
+  Your SMC actuator must be available via RS-485 from the computer.  We
+  assume that the actual underlying device is available via a symbolic
+  link `ttyS0' in the current directory.  For example, if this is a USB
+  RS-485 interface, it might actually be `/dev/tty.usbserial-B0019I24';
+  identify this device file, go to the directory in which you are going
+  to running the `cpppo_positioner' code, and run:
+  ┌────
+  │ $ ln -fs /dev/tty.usbserial-B0019I24 ttyS0
+  └────
+
+
+  Alternatively, specify the `address' parameter when calling
+  `smc.smc_modbus()'.
+
+
+1.4.2 `smc.smc_modbus'
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   This class is the gateway for accessing multiple SMC positioning
@@ -152,7 +194,7 @@
   discard the instance and create a new one.
 
 
-1.4.2 `.position' – Complete operation, Initiate new position
+1.4.3 `.position' – Complete operation, Initiate new position
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   The .position method checks that any current position operation is
@@ -219,7 +261,7 @@
   └────
 
 
-1.4.3 `.complete' – Check for completion
+1.4.4 `.complete' – Check for completion
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Confirms that any previous actuator positioning operation is complete,
@@ -244,7 +286,7 @@
   └────
 
 
-1.4.4 `.outputs' – Set/clear outputs (Coils)
+1.4.5 `.outputs' – Set/clear outputs (Coils)
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Modifies one or more named outputs (Coils) on the specified actuator.
@@ -266,7 +308,7 @@
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-1.4.5 `.status' – Return full status and position data
+1.4.6 `.status' – Return full status and position data
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Returns the current complete set of status and data values for the
@@ -332,18 +374,18 @@
   └────
 
 
-1.4.6 `.close' – Terminate polling of serial port, close device
+1.4.7 `.close' – Terminate polling of serial port, close device
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Ceases I/O to all actuators on RS485 circuit and releases the serial
   device.
 
 
-1.4.7 Command- or Pipe-line usage
+1.4.8 Command- or Pipe-line usage
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
-  An executable module entry point (`python -m cpppo_positioner'), and a
-  convenience executable script (`cpppo_positioner') are supplied.
+  An executable module entry point (`python3 -m cpppo_positioner'), and
+  a convenience executable script (`cpppo_positioner') are supplied.
 
   If your application generates a stream of actuator position data, or
   if you have some manual positions you wish to move to, you can use the
@@ -359,7 +401,7 @@
   command line, or as separate lines of input (if standard input is
   selected, by supplying a '-' option):
   ┌────
-  │ $ python -m cpppo_positioner --address gateway -v "$position"
+  │ $ python3 -m cpppo_positioner --address gateway -v "$position"
   │ $ echo "$position" | cpppo_positioner -v -
   └────
 
@@ -372,13 +414,12 @@
    dict       actuate the position (just check for completion if no position) 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-
   Here is an example of setting then clearing the RESET output, then
   beginning a position operation, and then waiting for it to complete in
   10 seconds:
 
   ┌────
-  │ $ python -m cpppo_positioner -vv '[1,"RESET"]' 1 '[1,"reset"]' 1 \
+  │ $ python3 -m cpppo_positioner -vv '[1,"RESET"]' 1 '[1,"reset"]' 1 \
   │    '{"actuator":1, "position":1000, ...}' '{"actuator":1,"timeout":10}'
   └────
 
@@ -388,7 +429,7 @@
   actuator #1!)
 
 
-◊ 1.4.7.1 Quoting double-quotes on Windows Powershell
+◊ 1.4.8.1 Quoting double-quotes on Windows Powershell
 
   Note that on Windows Cmd or Powershell, it is very difficult to quote
   double-quote characters in strings.  In Powershell, you need to use
@@ -408,7 +449,7 @@
   However, when you try to use them, they are re-interpreted on
   inclusion in a command:
   ┌────
-  │ PS > python -m cpppo_positioner -v "$position"
+  │ PS > python3 -m cpppo_positioner -v "$position"
   │ ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
   │     Expecting property name: line 1 column 3 (char 2)
   └────
@@ -417,7 +458,7 @@
   So, the only way to do this is to use the strange back-slash +
   back-tick double-escape, directly as a command-line argument:
   ┌────
-  │ PS > python -m cpppo_positioner -v '{ \`"actuator\`": 0, ... }'
+  │ PS > python3 -m cpppo_positioner -v '{ \`"actuator\`": 0, ... }'
   └────
 
 
@@ -425,8 +466,8 @@
   Windows.  Trust me; this is just the tip of the iceberg…
 
 
-1.5 SMC Gateway Simulator
-─────────────────────────
+2 SMC Gateway Simulator
+═══════════════════════
 
   A basic simulator of some of the Modbus/RTU I/O behaviour of an SMC
   actuator is implemented for testing purposes.  To use, disconnect the
@@ -439,5 +480,88 @@
   the current directory to the actual RS-485 serial interface in /dev,
   eg. `/dev/tty.usbserial-B0019I24'):
   ┌────
-  │ $ python -m cpppo_positioner.simulator --address ttyS1 --actuator 1
+  │ $ python3 -m cpppo_positioner.simulator --address ttyS1 --actuator 1
+  └────
+
+
+2.1 Virtual Serial Devices
+──────────────────────────
+
+  To run a simple Modbus/RTU simulator with some of the register
+  addresses of SMC Actuators on a simulator virtual RS-485 network, you
+  can use the `cpppo_positioner.ttyV-setup' script.
+
+  By default, this will create three virtual Pseudo-TTY devices in the
+  current directory: `ttyV0', `ttyV1' and `ttyV2'.  All traffic to any
+  of these devices will be written to all of them.  This simulates a
+  rudimentary multi-drop RS-485 network for testing.
+
+  Use `ttyV1', … as the target(s) for your `cpppo_positioner.simulator'
+  server(s), instead of `ttyS1' or your actual RS-485 I/O device
+  address.
+
+  Use `ttyV0' as the device to connect your `cpppo_positioner'
+
+  In a terminal, start the `ttyV' simulated serial device service like
+  this:
+  ┌────
+  │ $ . ./SMC-Project/bin/activate
+  │ (SMC-Project) $ python3 -m cpppo_positioner.ttyV-setup
+  │ ttyV0 -> /dev/ttys016
+  │ ttyV1 -> /dev/ttys017
+  │ ttyV2 -> /dev/ttys018
+  │ ...
+  └────
+
+
+  This will block, and when traffic begins to flow across the simulated
+  `ttyV...' devices, you'll see the number of bytes and which `ttyV#'
+  port it arrived at and was sent to:
+  ┌────
+  │ 41 <-- ttyV1: 0x0103240000000000000000000000000000000000000000000000000000000000000000000000007ba1
+  │ 41 --> ttyV0
+  │ 41 --> ttyV2
+  │ 8 <-- ttyV0: 0x000200480001380d
+  │ 8 --> ttyV1
+  │ 8 --> ttyV2
+  └────
+
+
+2.2 Simulated Positioning
+─────────────────────────
+
+  Once your simulated RS-485 network:
+  ┌────
+  │ (SMC-Project) $ python3 -m cpppo_positioner.ttyV-setup
+  └────
+
+
+  is up and your simulator:
+  ┌────
+  │ (SMC-Project) $ cpppo_positioner.simulator --address ttyV1 --actuator 1
+  └────
+
+
+  is running, try to write to some registers with delays of 1 second
+  between each:
+  ┌────
+  │ (SMC-Project) $ python3 -m cpppo_positioner --address ttyV0 -vvv \
+  │     '[1,"RESET"]' 1 '[1,"reset"]' 1
+  └────
+
+
+  and send a positioning request:
+  ┌────
+  │ (SMC-Project) $ python3 -m cpppo_positioner --address ttyV0 -vvv \
+  │     '{ "actuator": 0, "position": 12345, "speed": 100 }'
+  └────
+
+
+  You can use this to process a complex stream of commands, taking a
+  stream of commands from standard input where the `-' is in the list,
+  and then going to the final position after completing the stream of
+  requests:
+  ┌────
+  │ (SMC-Project) $ python3 -m cpppo_positioner --address ttyV0 -vvv \
+  │     '{ <initial position> }' '# a comment, followed by a delay' 1.5 - '{ <final position> }'
   └────
