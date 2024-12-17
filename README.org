@@ -101,6 +101,36 @@
     : >>> from cpppo_positioner import smc_modbus
     : >>>
 
+*** Testing
+
+    Once you have a working Python 3 venv and activated it, and installed =cpppo-positioner= in it,
+    you can use your cloned repository and some simulated RS-485 Pseudo-TTYs to verify that it
+    passes its unit tests, verifying that the basic API is operational.
+    
+    1) Create a =venv= (eg. =SMC-Project=) and activate it with =. ./SMC-Project/bin/activate=
+    2) Install =cpppo-positioner= in it with =python3 -m pip install cpppo-positioner=
+    3) Clone the [[https://github.com/pjkundert/cpppo_positioner.git]] repository to eg. =~/src/...=
+    4) Start some PTYs eg. =ttyV0=... in a terminal using =python3 -m cpppo_positioner.ttyV-setup=
+    5) Run the unit tests in the same directory where the =ttyV0=... files are using the repo:
+    : (SMC-Project) $ SERIAL_TEST=ttyV python3 -m pytest -v --capture=no --log-cli-level=INFO \
+    :     -k smc_ ~/src/cpppo_positioner
+
+    This will run the =smc_= unit tests.  If you skip the =--log-cli-level=INFO=, you'll see something like:
+    : ================================ test session starts ================================
+    : platform darwin -- Python 3.12.3, pytest-8.3.4, pluggy-1.5.0 -- /private/tmp/SMC-Project/bin/python3
+    : cachedir: .pytest_cache
+    : rootdir: /Users/perry/src/cpppo_positioner
+    : collected 2 items
+    :
+    : ../../Users/perry/src/cpppo_positioner/smc_test.py::test_smc_basic PASSED
+    : ../../Users/perry/src/cpppo_positioner/smc_test.py::test_smc_position PASSED
+
+    You'll also see the traffic in the terminal you started the =cpppo_positioner.ttyV-setup=.
+
+    If you have =ttyS0=, ... symbolic links in your current directory connected to USB RS-485
+    devices and they are wired together (GND, A+ and B- connected), you may substitute
+    =SERIAL_TEST=ttyS= in the above unit test, and they should also pass.
+
 ** Positioning
 
    A Python API is provided to implement positioning control for SMC actuators.
