@@ -1,1 +1,10 @@
-python __main__.py -v '{"actuator":1}' 1  '{"actuator": 1}' 1 '[1,"RESET"]' 1 '[1,"reset"]' 1 '{"actuator": 1, "timeout": 10, "position": 0, "movement_mode": 1, "speed": 500, "acceleration": 5000, "deceleration": 5000, "pushing_force": 0, "trigger_level": 0, "pushing_speed": 20, "moving_force": 100, "in_position": 100, "home": false}' 1 '{"actuator": 1, "timeout": 10, "svoff": true}' 1 '{"actuator": 1}'
+#! /usr/bin/env bash
+
+python __main__.py --address "${1:-ttyS0}" -vv \
+    '{"actuator":1}' 1 \
+    '{"actuator": 1}' 1 \
+    '[1,"RESET"]' 1 \
+    '[1,"reset"]' 1 \
+    '{"actuator": 1, "timeout": 10, "position": 0, "movement_mode": 1, "speed": 500, "acceleration": 5000, "deceleration": 5000, "pushing_force": 0, "trigger_level": 0, "pushing_speed": 20, "moving_force": 100, "in_position": 100, "home": false}' 1 \
+    '{"actuator": 1, "timeout": 10, "svoff": true}' 1 \
+    '{"actuator": 1}'

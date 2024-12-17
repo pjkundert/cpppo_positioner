@@ -33,17 +33,20 @@ import time
 import cpppo
 import serial
 
-from cpppo.remote.pymodbus_fixes import modbus_client_rtu, modbus_rtu_framer_collecting
+from cpppo.remote.pymodbus_fixes import modbus_client_rtu, Defaults
 from cpppo.remote.plc_modbus import poller_modbus
 
-from pymodbus.constants import Defaults
+#
+# All the defaults supplied to smc_modbus().
+# - Either modify these globals before invoking, or pass appropriate parameters
+# 
 
-PORT_MASTER			= '/dev/ttyS1'
+PORT_MASTER			= 'ttyS0'  # eg. a symbolic link ttyS0 -> /dev/tty.usbserial-B0019I24
 PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
 PORT_BAUDRATE			= 38400
-PORT_TIMEOUT			= 0.1		# RS-485 I/O timeout
+PORT_TIMEOUT			= 0.05		# RS-485 I/O timeout
 
 POLL_RATE			= .25
 
@@ -63,19 +66,20 @@ data				= cpppo.dotdict()
 # When Write
 # Gives instructions to controller.
 # Only valid when in serial driving mode.
-# (ON: 1, OFF: 0) 
+# (ON: 1, OFF: 0)
+# Coils are indexed from int('00001')
 data.Y10_IN0			= {}
-data.Y10_IN0.addr		= 00001 + 0x10 # == 17
+data.Y10_IN0.addr		= 1 + 0x10 # == 17
 data.Y11_IN1			= {}
-data.Y11_IN1.addr		= 00001 + 0x11
+data.Y11_IN1.addr		= 1 + 0x11
 data.Y12_IN2			= {}
-data.Y12_IN2.addr		= 00001 + 0x12
+data.Y12_IN2.addr		= 1 + 0x12
 data.Y13_IN3			= {}
-data.Y13_IN3.addr		= 00001 + 0x13
+data.Y13_IN3.addr		= 1 + 0x13
 data.Y14_IN4			= {}
-data.Y14_IN4.addr		= 00001 + 0x14
+data.Y14_IN4.addr		= 1 + 0x14
 data.Y15_IN5			= {}
-data.Y15_IN5.addr		= 00001 + 0x15
+data.Y15_IN5.addr		= 1 + 0x15
 
 # When Read
 # Displays the instruction state when in serial driving mode.
@@ -85,21 +89,21 @@ data.Y15_IN5.addr		= 00001 + 0x15
 # Only valid when in serial driving mode.
 # (ON: 1, OFF: 0)
 data.Y18_HOLD			= {}
-data.Y18_HOLD.addr		= 00001 + 0x18
+data.Y18_HOLD.addr		= 1 + 0x18
 data.Y19_SVON			= {}
-data.Y19_SVON.addr		= 00001 + 0x19
+data.Y19_SVON.addr		= 1 + 0x19
 data.Y1A_DRIVE			= {}
-data.Y1A_DRIVE.addr		= 00001 + 0x1a
+data.Y1A_DRIVE.addr		= 1 + 0x1a
 data.Y1B_RESET			= {}
-data.Y1B_RESET.addr		= 00001 + 0x1b
+data.Y1B_RESET.addr		= 1 + 0x1b
 data.Y1C_SETUP			= {}
-data.Y1C_SETUP.addr		= 00001 + 0x1c
+data.Y1C_SETUP.addr		= 1 + 0x1c
 # Move to -'ve direction by JOG operation. (1: move, 2: stop) 
 data.Y1D_JOG_MINUS		= {}
-data.Y1D_JOG_MINUS.addr		= 00001 + 0x1d
+data.Y1D_JOG_MINUS.addr		= 1 + 0x1d
 # Move to +'ve direction by JOG operation. (1: move, 2: stop) 
 data.Y1E_JOG_PLUS		= {}
-data.Y1E_JOG_PLUS.addr		= 00001 + 0x1e
+data.Y1E_JOG_PLUS.addr		= 1 + 0x1e
 
 # The driving input mode (parallel/ serial) is switched in Y30.
 # 
@@ -110,7 +114,7 @@ data.Y1E_JOG_PLUS.addr		= 00001 + 0x1e
 # continued. Conversely, when Y30 is specified from 1 to 0, the state of the parallel input terminal
 # is reflected immediately.
 data.Y30_INPUT_INVALID		= {}
-data.Y30_INPUT_INVALID.addr	= 00001 + 0x30 # == 49 (round up to 0x3f == 64)
+data.Y30_INPUT_INVALID.addr	= 1 + 0x30 # == 49 (round up to 0x3f == 64)
 
 
 # X Discrete Inputs Internal Flags (status flags).  Read only.
@@ -223,8 +227,8 @@ class smc_modbus( modbus_client_rtu ):
         Defaults.Timeout	= timeout	# RS-485 I/O timeout
 
         super( smc_modbus, self, ).__init__(
-            framer=modbus_rtu_framer_collecting, port=address, stopbits=stopbits, bytesize=bytesize,
-            parity=parity, baudrate=baudrate )
+             port=address, stopbits=stopbits, bytesize=bytesize,
+            parity=parity, baudrate=baudrate, timeout=timeout )
 
         self.pollers		= {} # {unit#: <poller_modbus>,}
         self.rate		= rate
@@ -266,9 +270,11 @@ class smc_modbus( modbus_client_rtu ):
         dictionary.  Will return None for any values not yet polled (or when communications fails).
 
         """
-    	unit			= self.unit( uid=actuator )
+        unit			= self.unit( uid=actuator )
         result			= {}
-        for k in super( cpppo.dotdict, data ).keys(): # Use dict key iteration, rather than dotdict full-depth keys
+
+        # Roughly equivalent to dict key iteration, rather than dotdict full-depth keys            
+        for k in data.iterkeys( depth=0 ):
             addr		= data[k].addr
             format		= data[k].get( 'format' )
             values		= [ unit.read( data[k].addr ) ]
@@ -329,9 +335,9 @@ class smc_modbus( modbus_client_rtu ):
         for f in flags:
             NAM			= f.upper()
             nam			= f.lower()
-            key			= [ k for k in super( cpppo.dotdict, data ).keys()
+            key			= [ k for k in data.iterkeys( depth=0 )
                                     if k.startswith( 'Y' ) and k.endswith( NAM ) ]
-            assert len( key ) == 1 and f in (NAM,nam), "invalid/ambiguous key name %s" % ( f )
+            assert len( key ) == 1 and f in (NAM,nam), "invalid/ambiguous key name %s: %r" % ( f, key )
             val			= bool( f == NAM )
             logging.detail( "%s/%-8s <== %s", unit.description, f, val )
             unit.write( data[key[0]].addr, val )
@@ -431,9 +437,9 @@ class smc_modbus( modbus_client_rtu ):
         # writes, so we use multiple register writes for each value.
         for k,v in kwds.items():
             assert k in data, \
-                "Unrecognized positioning keyword: %s == %v" % ( k, v )
+                "Unrecognized positioning keyword: %s == %r" % ( k, v )
             assert STEP_DATA_BEG <= data[k].addr <= STEP_DATA_END, \
-                "Invalid positioning keyword: %s == %v; not within position data address range" % ( k, v )
+                "Invalid positioning keyword: %s == %r; not within position data address range" % ( k, v )
             format		= data[k].get( 'format' )
             if format:
                 # Create a big-endian buffer.  This will be some multiple of register size.  Then,

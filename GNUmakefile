@@ -3,15 +3,21 @@
 # 
 
 # PY[23] is the target Python interpreter.  It must have pytest installed.
+SHELL		= /bin/bash
 
-PY2=python
-PY3=python3
+PY2		?= python2
+PY2_V		= $(shell $(PY2) -c "import sys; print('-'.join((next(iter(filter(None,sys.executable.split('/')))),sys.platform,sys.subversion[0].lower(),''.join(map(str,sys.version_info[:2])))))"  )
+PY3		?= python3
+PY3_V		= $(shell $(PY3) -c "import sys; print('-'.join((next(iter(filter(None,sys.executable.split('/')))),sys.platform,sys.implementation.cache_tag)))" 2>/dev/null )
+
+VERSION		= $(shell $(PY3) -c 'exec(open("version.py").read()); print( __version__ )')
+WHEEL		= dist/cpppo_positioner-$(VERSION)-py3-none-any.whl
 
 # PY[23]TEST is the desired method of invoking py.test; either as a command, or
 # loading it as module, by directly invoking the target Python interpreter.
 # 
 # Ensure your locale is set to a UTF-8 encoding; run 'locale'; you should see something like:
- 
+
 #     LANG=en_CA.UTF-8
 #     LANGUAGE=en_CA:en
 #     LC_CTYPE="en_CA.UTF-8"
@@ -35,43 +41,43 @@ PY3=python3
 # 
 
 # To see all pytest output, uncomment --capture=no
-PYTESTOPTS=-v # --capture=no
+PYTESTOPTS	= -v --capture=no --log-cli-level=23 # 25 NORMAL 23 DETAIL 
 
 # Preferred timezone for tests.  If you change this, then you will probably have
 # to augment history_test.py to include checking for timestamp.local output in
 # your local timezone; See history_test.py test_history_timestamp() for supported
 # zones
-TZ=Canada/Mountain
+TZ		= Canada/Mountain
 
-PY2TEST=TZ=$(TZ) $(PY2) -m pytest $(PYTESTOPTS)
-PY3TEST=TZ=$(TZ) $(PY3) -m pytest $(PYTESTOPTS)
+GHUB_NAME	= cpppo_positioner
+GHUB_REPO	= git@github.com:pjkundert/$(GHUB_NAME).git
+GHUB_BRCH	= $(shell git rev-parse --abbrev-ref HEAD )
 
-.PHONY: all test clean upload
+# We'll agonizingly find the directory above this makefile's path
+VENV_DIR	= $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/.. )
+VENV_NAME	= $(GHUB_NAME)-$(VERSION)-$(PY3_V)
+VENV		= $(VENV_DIR)/$(VENV_NAME)
+VENV_OPTS	=
+
+PY2TEST		= TZ=$(TZ) $(PY2) -m pytest $(PYTESTOPTS)
+PY3TEST		= TZ=$(TZ) $(PY3) -m pytest $(PYTESTOPTS)
+
+.PHONY: all test clean FORCE
 all:			help
 
 help:
-	@echo "GNUmakefile for cpppo.  Targets:"
+	@echo "GNUmakefile for cpppo_positioner.  Targets:"
 	@echo "  help			This help"
 	@echo "  test			Run unit tests under Python2"
 	@echo "  test-...		  Run only tests in ..._test.py"
 	@echo "  unit-...		  Run only tests with names matching ..."
 	@echo "  install		Install in /usr/local for Python2"
 	@echo "  clean			Remove build artifacts"
-	@echo "  upload			Upload new version to pypi (package maintainer only)"
 
 test:
-	$(PY2TEST) || true
-#	$(PY3TEST) || true
+	$(PY3TEST) || true
+#	$(PY2TEST) || true
 
-install:
-	$(PY2) setup.py install
-#	$(PY3) setup.py install
-
-# Support uploading a new version of cpppo to pypi.  Must:
-#   o advance __version__ number in cpppo/misc.py
-#   o log in to your pypi account (ie. for package maintainer only)
-upload:
-	python setup.py sdist upload
 
 clean:
 	rm -f MANIFEST *.png $(shell find . -name '*.pyc' )
@@ -83,14 +89,66 @@ analyze:
 	  --exclude="__init__.py" \
 	  .
 
+build-check:
+	@$(PY3) -m build --version \
+	    || ( echo "\n*** Missing Python modules; run:\n\n        $(PY3) -m pip install --upgrade -r requirements-dev.txt\n" \
+	        && false )
+
+build:	build-check clean wheel
+
+wheel:	$(WHEEL)
+
+$(WHEEL):	FORCE
+	$(PY3) -m pip install -r requirements-dev.txt
+	$(PY3) -m build .
+	@ls -last dist
+
+install:	$(WHEEL) FORCE
+	$(PY3) -m pip install --force-reinstall $<[all]
+
+install-%:  # ...-dev, -tests
+	$(PY3) -m pip install --upgrade -r requirements-$*.txt
+
+
+#
+# venv:		Create a Virtual Env containing the installed repo
+#
+.PHONY: venv
+venv:			$(VENV)
+	@echo; echo "*** Activating $< VirtualEnv for Interactive $(SHELL)"
+	@bash --init-file $</bin/activate -i
+
+$(VENV):
+	@echo; echo "*** Building $@ VirtualEnv..."
+	@rm -rf $@ && $(PY3) -m venv $(VENV_OPTS) $@ \
+	    && source $@/bin/activate \
+	    && make install install-tests
+
+
+
+#
+# nix-...:
+#
+# Use a NixOS environment to execute the make target, eg.
+#
+#     nix-venv-activate
+#
+#     The default is the Python 3 crypto_licensing target in default.nix; choose
+# TARGET=py27 to test under Python 2 (more difficult as time goes on).  See default.nix for
+# other Python version targets.
+#
+nix-%:
+	nix-shell $(NIX_OPTS) --run "make $*"
+
+
 # Run only tests with a prefix containing the target string, eg test-blah
 test-%:
-	$(PY2TEST) *$*_test.py
-#	$(PY3TEST) *$*_test.py
+	$(PY3TEST) *$*_test.py
+#	$(PY2TEST) *$*_test.py
 
 unit-%:
-	$(PY2TEST) -k $*
-#	$(PY3TEST) -k $*
+	$(PY3TEST) -k $*
+#	$(PY2TEST) -k $*
 
 
 #

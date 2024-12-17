@@ -23,3 +23,6 @@ dist/
 *.egg-info/
 *.svg
 .vagrant
+*.aux
+/ttyS[0-9]
+/ttyV[0-9]
