@@ -1,6 +1,8 @@
 import json
 import os
 import pytest
+import re
+import sys
 import time
 
 import cpppo
@@ -18,7 +20,17 @@ logging.basicConfig( **cpppo.log_cfg )
 # $ python3 ./ttyV-setup.py &
 # $ SERIAL_TEST=ttyV make test
 #
-PORT_BASE			= os.environ.get( "SERIAL_TEST", "ttyS" )
+if sys.platform == 'win32':
+    PORT_BASE_DEFAULT		= "COM"
+    PORT_NUM_DEFAULT		= 3
+else:
+    PORT_BASE_DEFAULT		= "ttyS"
+    PORT_NUM_DEFAULT		= 0
+
+# Handles eg. "3" (start default port name at 3), "COM2", "ttyS", and even ""
+PORT_BASE,PORT_NUM		= re.match( r'^(.*?)(\d*)$', os.environ.get( "SERIAL_TEST", "" )).groups()
+PORT_NUM			= PORT_NUM or PORT_NUM_DEFAULT
+PORT_BASE			= PORT_BASE or PORT_BASE_DEFAULT
 
 #
 # For the purposes of testing, we could change the global smc.PORT_MASTER to our testing port, but
@@ -26,10 +38,9 @@ PORT_BASE			= os.environ.get( "SERIAL_TEST", "ttyS" )
 # ensure the start_modbus_simulator starts on the correct PORT_SLAVE_# TTYs, and we pass the
 # 'address' parameter when we start the smc_modbus clients!
 #
-PORT_MASTER			= "{PORT_BASE}0".format( PORT_BASE=PORT_BASE )
-
-PORT_SLAVE_1			= "{PORT_BASE}1".format( PORT_BASE=PORT_BASE )
-PORT_SLAVE_2			= "{PORT_BASE}2".format( PORT_BASE=PORT_BASE )
+PORT_MASTER			= "{PORT_BASE}{PORT_NUM}".format( PORT_BASE=PORT_BASE, PORT_NUM=PORT_NUM+0 )
+PORT_SLAVE_1			= "{PORT_BASE}{PORT_NUM}".format( PORT_BASE=PORT_BASE, PORT_NUM=PORT_NUM+1 )
+PORT_SLAVE_2			= "{PORT_BASE}{PORT_NUM}".format( PORT_BASE=PORT_BASE, PORT_NUM=PORT_NUM+2 )
 PORT_SLAVES			= {
     PORT_SLAVE_1: [1,3],
     PORT_SLAVE_2: [2,4],
