@@ -211,8 +211,8 @@ def asyncio_actuator( tty ):
             single	= False,
             slaves	= {
                 unit: ModbusSlaveContext(
-                    di=ModbusSparseDataBlock(dict( (a,0) for a in range(   0x40,   0x50+1 ))),
                     co=ModbusSparseDataBlock(dict( (a,0) for a in range(   0x10,   0x3F+1 ))),
+                    di=ModbusSparseDataBlock(dict( (a,0) for a in range(   0x40,   0x50+1 ))),
                     hr=ModbusSparseDataBlock(dict( (a,0) for a in range( 0x9000, 0x911F+1 ))),
                     ir=ModbusSparseDataBlock(dict()),
                 )

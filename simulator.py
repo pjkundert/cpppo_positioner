@@ -38,7 +38,7 @@ import sys
 import os
 import json
 
-from cpppo.bin.modbus_sim import main
+from cpppo.bin.modbus_sim import main as main_modbus_sim
 
 if __name__ == "__main__" and __package__ is None:
     # Ensure that importing works (whether cpppo_positioner installed or not) with:
@@ -85,14 +85,14 @@ if __name__ == "__main__":
     assert actuators, \
         "Must supply 1 or more --actuator <id> numbers, eg 1"
 
-
+    # Does NOT simulate the behaviors of an SMC Actuator; just the required registers
     argv			= [
         '-vvv', '--log', '.'.join( [
             'simulator', 'log', 'actuator_'+'_'.join( map( str, actuators )) ] ),
         '--address', address,
-        '    17 -     64 = 0',	# Coil           0x10   - 0x30   (     1 +) (rounded to 16 bits)
-        ' 10065 -  10080 = 0',	# Discrete Input 0x40   - 0x4F   ( 10001 +)
-        ' 76865 -  77138 = 0',	# Holding Regs   0x9000 - 0x9111 ( 40001 +)
+        '    17 -     64 = 0',	# Coil           0x10   - 0x3F   (     1 +) (rounded to 16 bits)
+        ' 10065 -  10081 = 0',	# Discrete Input 0x40   - 0x50   ( 10001 +)
+        ' 76865 -  77376 = 0',	# Holding Regs   0x9000 - 0x911F ( 40001 +)
         # Configure Modbus/RTU simulator to use specified port serial framing
         '--config', json.dumps( {
             'stopbits': smc.PORT_STOPBITS,
@@ -105,4 +105,4 @@ if __name__ == "__main__":
         } )
     ]
 
-    sys.exit( main( argv=argv ))
+    sys.exit( main_modbus_sim( argv=argv ))

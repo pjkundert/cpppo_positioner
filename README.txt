@@ -158,7 +158,6 @@
   │     -k smc_ ~/src/cpppo_positioner
   └────
 
-
   This will run the `smc_' unit tests.  If you skip the
   `--log-cli-level=INFO', you'll see something like:
   ┌────
@@ -172,7 +171,6 @@
   │ ../../Users/perry/src/cpppo_positioner/smc_test.py::test_smc_position PASSED
   └────
 
-
   You'll also see the traffic in the terminal you started the
   `cpppo_positioner.ttyV-setup'.
 
@@ -180,6 +178,36 @@
   connected to USB RS-485 devices and they are wired together (GND, A+
   and B- connected), you may substitute `SERIAL_TEST=ttyS' in the above
   unit test, and they should also pass.
+
+
+◊ 1.3.2.1 Windows Unit Testing
+
+  To test on Windows, plug in 2 USB-RS485 adapters; they should be
+  automatically provisioned as COM3 and COM4.  Ensure that the RS-485
+  adapters are wired together directly: `A+-' to `A+', `B-' to `B-', and
+  `GND' to `GND'.
+
+  Run the unit tests w/ a normal level of logging:
+  ┌────
+  │ $env:SERIAL_TEST="COM"; python3 -m pytest -k position -v --capture=no --log-cli-level=25
+  │ ...
+  │ smc_test.py::test_smc_position
+  │ ---------------------------------------------------- live log call ----------------------------------------------------
+  │ NORMAL   root:smc_test.py:349 Using Actuator Simulator on COM4
+  │ WARNING  root:pymodbus_fixes.py:120 Listen on server_listener...
+  │ NORMAL   root:pymodbus_fixes.py:129 Communication established on server_listener
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:         position:        0 (== [0, 0])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:    movement_mode:        1 (== [1])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:            speed:      500 (== [500])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:     acceleration:     5000 (== [5000])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:     deceleration:     5000 (== [5000])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:    pushing_force:        0 (== [0])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:    trigger_level:        0 (== [0])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:    pushing_speed:       20 (== [20])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:     moving_force:      100 (== [100])
+  │ NORMAL   root:smc.py:454 Position: actuator   1 updated:      in_position:      100 (== [0, 100])
+  │ PASSED
+  └────
 
 
 1.4 Positioning
@@ -225,7 +253,7 @@
    keyword   description                                                     
   ───────────────────────────────────────────────────────────────────────────
    address   The serial port device address, default "ttyS1"                 
-   timeout   The RS-485 I/O timeout, default .05s                            
+   timeout   The RS-485 I/O timeout, default .075s                           
    baudrate  Default 38,400                                                  
    stopbits  Default 1                                                       
    bytesize  Default 8                                                       
@@ -438,7 +466,8 @@
   if you have some manual positions you wish to move to, you can use the
   command-line interface.  You may supply one or more actuator positions
   in blobs of JSON data (an actual position would have more entries,
-  such as `acceleration', `deceleration', `timeout', …):
+  such as `acceleration', `deceleration', `timeout', …).  Here's an
+  example that works on Posix system shells (eg. bash on Linux, macOS):
   ┌────
   │ $ position='{ "actuator": 0, "position": 12345, "speed": 100 }'
   └────
@@ -448,7 +477,8 @@
   command line, or as separate lines of input (if standard input is
   selected, by supplying a '-' option):
   ┌────
-  │ $ python3 -m cpppo_positioner --address gateway -v "$position"
+  │ $ ln -fs /dev/tty.usbserial-B0019I24 ttyS0  # or just use eg. COM3 on Windows
+  │ $ python3 -m cpppo_positioner --address ttyS0 -v "$position"
   │ $ echo "$position" | cpppo_positioner -v -
   └────
 
@@ -464,10 +494,16 @@
   Here is an example of setting then clearing the RESET output, then
   beginning a position operation, and then waiting for it to complete in
   10 seconds:
-
   ┌────
-  │ $ python3 -m cpppo_positioner -vv '[1,"RESET"]' 1 '[1,"reset"]' 1 \
-  │    '{"actuator":1, "position":1000, ...}' '{"actuator":1,"timeout":10}'
+  │ $ python3 -m cpppo_positioner -vv --address COM3 '[1,"RESET"]' 1 '[1,"reset"]' 1 \
+  │    '{"actuator":1, "position":1000}' '{"actuator":1,"timeout":10}'
+  └────
+
+
+  On Windows Powershell, this will be something like:
+  ┌────
+  │ $ python3 -m cpppo_positioner -vv --address COM3 '[1,\"RESET\"]' 1 '[1,\"reset\"]' 1 \
+  │    '{\"actuator\":1, \"position\":1000}' '{\"actuator\":1,\"timeout\":10}'
   └────
 
 
@@ -511,6 +547,16 @@
 
   Recommendation: use Linux or Mac, or install Cygwin and use bash on
   Windows.  Trust me; this is just the tip of the iceberg…
+
+
+◊ 1.4.8.2 Update on Windows Powershell Quoting
+
+  Powershell appears to have updated its escape handling.  Using the
+  `$position' environment variable approach still doesn't work, but the
+  following now works (oddly):
+  ┌────
+  │ python3 -m cpppo_positioner -v '{ \"actuator\": 0, \"position\": 12345, \"speed\": 100 }' 
+  └────
 
 
 2 SMC Gateway Simulator
