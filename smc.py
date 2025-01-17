@@ -48,7 +48,7 @@ PORT_PARITY			= serial.PARITY_NONE
 PORT_BAUDRATE			= 38400
 PORT_TIMEOUT			= 0.05		# RS-485 I/O timeout
 
-POLL_RATE			= .25
+POLL_RATE			= .5		# Nyquist Rate for 1Hz Updates
 
 
 # 
@@ -227,7 +227,7 @@ class smc_modbus( modbus_client_rtu ):
         Defaults.Timeout	= timeout	# RS-485 I/O timeout
 
         super( smc_modbus, self, ).__init__(
-             port=address, stopbits=stopbits, bytesize=bytesize,
+            port=address, stopbits=stopbits, bytesize=bytesize,
             parity=parity, baudrate=baudrate, timeout=timeout )
 
         self.pollers		= {} # {unit#: <poller_modbus>,}

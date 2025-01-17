@@ -41,7 +41,7 @@ WHEEL		= dist/cpppo_positioner-$(VERSION)-py3-none-any.whl
 # 
 
 # To see all pytest output, uncomment --capture=no
-PYTESTOPTS	= -v --capture=no --log-cli-level=23 # 25 NORMAL 23 DETAIL 
+PYTESTOPTS	= -v --capture=no --log-cli-level=INFO # 23 # 25 NORMAL 23 DETAIL 
 
 # Preferred timezone for tests.  If you change this, then you will probably have
 # to augment history_test.py to include checking for timestamp.local output in

@@ -1,9 +1,10 @@
+#! /usr/bin/env python3
+
 import os
 import pty
 import select
 import sys
 import termios
-import fcntl
 
 N				= int(sys.argv[1]) if len(sys.argv) > 1 else 3
 masters				= {}  # <master-fd>: <slave-name>

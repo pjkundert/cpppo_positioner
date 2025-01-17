@@ -41,6 +41,8 @@ setup(
     name			= "cpppo_positioner",
     version			= __version__,  # noqa: F821
     install_requires		= install_requires,
+    tests_require		= tests_require,
+    extras_require		= extras_require,
     packages			= packages,
     package_dir			= package_dir,
     entry_points		= entry_points,

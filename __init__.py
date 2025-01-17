@@ -26,4 +26,4 @@ __license__                     = "Dual License: GPLv3 (or later) and Commercial
 
 __all__                         = []
 
-from .version  import __version__
+from .version  import __version__, __version_info__
