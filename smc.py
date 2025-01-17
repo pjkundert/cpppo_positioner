@@ -46,7 +46,7 @@ PORT_STOPBITS			= 1
 PORT_BYTESIZE			= 8
 PORT_PARITY			= serial.PARITY_NONE
 PORT_BAUDRATE			= 38400
-PORT_TIMEOUT			= 0.05		# RS-485 I/O timeout
+PORT_TIMEOUT			= 0.075		# RS-485 I/O timeout
 
 POLL_RATE			= .5		# Nyquist Rate for 1Hz Updates
 
