@@ -76,18 +76,35 @@
   controlling even more than 100 actuators may be possible.
 
 
-1.3 Installing
-──────────────
+1.3 Installing Python and `cpppo-positioner'
+────────────────────────────────────────────
 
   Install a Python 3.9+ installation of your choice to run code using
-  `cpppo_positioner'.  It is recommended that you don't install this (or
-  /any/) Python packages globally; create a Python `venv' virtual
-  environment:
-
+  `cpppo_positioner'.  On Windows, start a Terminal with PowerShell as
+  Administrator, and run:
   ┌────
-  │ $ python3 -m venv SMC-Project
+  │ winget install -e --id Python.Python3.12 --scope machine
+  └────
+
+
+1.3.1 From PyPI
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
+  It is recommended that you don't install this (or /any/) Python
+  packages globally; create a Python `venv' virtual environment:
+  ┌────
+  │ $ python -m venv SMC-Project
   │ $ . ./SMC-Project/bin/activate
-  │ $ (SMC-Project) $ python3 -m pip install cpppo-positioner
+  │ $ (SMC-Project) $ python -m pip install cpppo-positioner
+  └────
+
+
+  On Windows Powershell:
+  ┌────
+  │ PS> python -m venv SMC-Project
+  │ PS> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+  │ PS> ./SMC-Project/Scripts/Activate.ps1
+  │ (SMC-Project) PS> python -m pip install cpppo_positioner
   └────
 
 
@@ -100,10 +117,10 @@
   attempts to import and use `cpppo_positioner'.
 
 
-1.3.1 From Source
+1.3.2 From Source
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
-  Cpppo_positioner requires `pymodbus' version 3.8.0+.  Until `pymodbus'
+  Cpppo_positioner requires `pymodbus' version 3.8.1.  Until `pymodbus'
   integrates some fixes, it will *not* support RS-485 multi-drop;
   polling or writing multiple RS-485 servers (devices) from a single
   client will not work!  Install
@@ -125,17 +142,17 @@
   └────
 
 
-  Alternatively, set up your own Python3 installation that allows `pip'
+  Alternatively, set up your own Python 3 installation that allows `pip'
   installs, and:
   ┌────
-  │ $ python3 -m pip install .
-  │ $ python3
+  │ $ python -m pip install .[all,tests]
+  │ $ python
   │ >>> from cpppo_positioner import smc_modbus
   │ >>>
   └────
 
 
-1.3.2 Testing
+1.3.3 Testing
 ╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Once you have a working Python 3 venv and activated it, and installed
@@ -145,16 +162,16 @@
 
   1) Create a `venv' (eg. `SMC-Project') and activate it with
      `. ./SMC-Project/bin/activate'
-  2) Install `cpppo-positioner' in it with `python3 -m pip install
+  2) Install `cpppo-positioner' in it with `python -m pip install
      cpppo-positioner'
   3) Clone the <https://github.com/pjkundert/cpppo_positioner.git>
      repository to eg. `~/src/...'
-  4) Start some PTYs eg. `ttyV0'… in a terminal using `python3 -m
+  4) Start some PTYs eg. `ttyV0'… in a terminal using `python -m
      cpppo_positioner.ttyV-setup'
   5) Run the unit tests in the same directory where the `ttyV0'… files
      are using the repo:
   ┌────
-  │ (SMC-Project) $ SERIAL_TEST=ttyV python3 -m pytest -v --capture=no --log-cli-level=INFO \
+  │ (SMC-Project) $ SERIAL_TEST=ttyV python -m pytest -v --capture=no --log-cli-level=INFO \
   │     -k smc_ ~/src/cpppo_positioner
   └────
 
@@ -180,7 +197,30 @@
   unit test, and they should also pass.
 
 
-◊ 1.3.2.1 Windows Unit Testing
+◊ 1.3.3.1 Testing on Windows with USB-RS485 Devices
+
+  Plug in 2 USB-RS485 devices, and start the simulator in a Powershell
+  Terminal:
+  ┌────
+  │ PS> ./SMC-Project/Scripts/Activate.ps1
+  │ (SMC-Project) PS> python -m cpppo_positioner.simulator -v --actuator 1 --address COM3
+  │ Success; Started Modbus/RTU Simulator; PID = 5692; address = COM3
+  └────
+
+
+  In another Powershell Terminal:
+  ┌────
+  │ PS> ./SMC-Project/Scripts/Activate.ps1
+  │ (SMC-Project) PS> python -m cpppo_positioner --address COM4 -vv \
+  │     '[1,"RESET"]' 1 '[1,"reset"]' 1
+  └────
+
+
+  You should see I/O logging and the polled SMC Modbus/RTU Gateway
+  status.
+
+
+◊ 1.3.3.2 Windows Unit Testing
 
   To test on Windows, plug in 2 USB-RS485 adapters; they should be
   automatically provisioned as COM3 and COM4.  Ensure that the RS-485
@@ -189,7 +229,7 @@
 
   Run the unit tests w/ a normal level of logging:
   ┌────
-  │ $env:SERIAL_TEST="COM"; python3 -m pytest -k position -v --capture=no --log-cli-level=25
+  │ $env:SERIAL_TEST="COM"; python -m pytest -k position -v --capture=no --log-cli-level=25
   │ ...
   │ smc_test.py::test_smc_position
   │ ---------------------------------------------------- live log call ----------------------------------------------------
@@ -459,8 +499,8 @@
 1.4.8 Command- or Pipe-line usage
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
-  An executable module entry point (`python3 -m cpppo_positioner'), and
-  a convenience executable script (`cpppo_positioner') are supplied.
+  An executable module entry point (`python -m cpppo_positioner'), and a
+  convenience executable script (`cpppo_positioner') are supplied.
 
   If your application generates a stream of actuator position data, or
   if you have some manual positions you wish to move to, you can use the
@@ -478,7 +518,7 @@
   selected, by supplying a '-' option):
   ┌────
   │ $ ln -fs /dev/tty.usbserial-B0019I24 ttyS0  # or just use eg. COM3 on Windows
-  │ $ python3 -m cpppo_positioner --address ttyS0 -v "$position"
+  │ $ python -m cpppo_positioner --address ttyS0 -v "$position"
   │ $ echo "$position" | cpppo_positioner -v -
   └────
 
@@ -495,14 +535,14 @@
   beginning a position operation, and then waiting for it to complete in
   10 seconds:
   ┌────
-  │ $ python3 -m cpppo_positioner -vv --address COM3 '[1,"RESET"]' 1 '[1,"reset"]' 1 \
+  │ $ python -m cpppo_positioner -vv --address COM3 '[1,"RESET"]' 1 '[1,"reset"]' 1 \
   │    '{"actuator":1, "position":1000}' '{"actuator":1,"timeout":10}'
   └────
 
 
   On Windows Powershell, this will be something like:
   ┌────
-  │ $ python3 -m cpppo_positioner -vv --address COM3 '[1,\"RESET\"]' 1 '[1,\"reset\"]' 1 \
+  │ $ python -m cpppo_positioner -vv --address COM3 '[1,\"RESET\"]' 1 '[1,\"reset\"]' 1 \
   │    '{\"actuator\":1, \"position\":1000}' '{\"actuator\":1,\"timeout\":10}'
   └────
 
@@ -532,7 +572,7 @@
   However, when you try to use them, they are re-interpreted on
   inclusion in a command:
   ┌────
-  │ PS > python3 -m cpppo_positioner -v "$position"
+  │ PS > python -m cpppo_positioner -v "$position"
   │ ... Invalid position data: { actuator: 0, position: 12345, speed: 100 };
   │     Expecting property name: line 1 column 3 (char 2)
   └────
@@ -541,7 +581,7 @@
   So, the only way to do this is to use the strange back-slash +
   back-tick double-escape, directly as a command-line argument:
   ┌────
-  │ PS > python3 -m cpppo_positioner -v '{ \`"actuator\`": 0, ... }'
+  │ PS > python -m cpppo_positioner -v '{ \`"actuator\`": 0, ... }'
   └────
 
 
@@ -555,7 +595,7 @@
   `$position' environment variable approach still doesn't work, but the
   following now works (oddly):
   ┌────
-  │ python3 -m cpppo_positioner -v '{ \"actuator\": 0, \"position\": 12345, \"speed\": 100 }' 
+  │ python -m cpppo_positioner -v '{ \"actuator\": 0, \"position\": 12345, \"speed\": 100 }'
   └────
 
 
@@ -573,7 +613,7 @@
   the current directory to the actual RS-485 serial interface in /dev,
   eg. `/dev/tty.usbserial-B0019I24'):
   ┌────
-  │ $ python3 -m cpppo_positioner.simulator --address ttyS1 --actuator 1
+  │ $ python -m cpppo_positioner.simulator --address ttyS1 --actuator 1
   └────
 
 
@@ -599,7 +639,7 @@
   this:
   ┌────
   │ $ . ./SMC-Project/bin/activate
-  │ (SMC-Project) $ python3 -m cpppo_positioner.ttyV-setup
+  │ (SMC-Project) $ python -m cpppo_positioner.ttyV-setup
   │ ttyV0 -> /dev/ttys016
   │ ttyV1 -> /dev/ttys017
   │ ttyV2 -> /dev/ttys018
@@ -625,7 +665,7 @@
 
   Once your simulated RS-485 network:
   ┌────
-  │ (SMC-Project) $ python3 -m cpppo_positioner.ttyV-setup
+  │ (SMC-Project) $ python -m cpppo_positioner.ttyV-setup
   └────
 
 
@@ -638,14 +678,14 @@
   is running, try to write to some registers with delays of 1 second
   between each:
   ┌────
-  │ (SMC-Project) $ python3 -m cpppo_positioner --address ttyV0 -vvv \
+  │ (SMC-Project) $ python -m cpppo_positioner --address ttyV0 -vvv \
   │     '[1,"RESET"]' 1 '[1,"reset"]' 1
   └────
 
 
   and send a positioning request:
   ┌────
-  │ (SMC-Project) $ python3 -m cpppo_positioner --address ttyV0 -vvv \
+  │ (SMC-Project) $ python -m cpppo_positioner --address ttyV0 -vvv \
   │     '{ "actuator": 0, "position": 12345, "speed": 100 }'
   └────
 
@@ -655,6 +695,6 @@
   and then going to the final position after completing the stream of
   requests:
   ┌────
-  │ (SMC-Project) $ python3 -m cpppo_positioner --address ttyV0 -vvv \
+  │ (SMC-Project) $ python -m cpppo_positioner --address ttyV0 -vvv \
   │     '{ <initial position> }' '# a comment, followed by a delay' 1.5 - '{ <final position> }'
   └────
