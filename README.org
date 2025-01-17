@@ -167,7 +167,12 @@
 
      Run the unit tests w/ a normal level of logging:
      #+LATEX: {\scriptsize
-     : $env:SERIAL_TEST="COM"; python -m pytest -k position -v --capture=no --log-cli-level=25
+     : PS> winget install --id Git.Git -e --source winget  # (Re-open the Terminal to update $PATH)
+     : PS> ./SMC-Project/Scripts/Activate.ps1
+     : (SMC-Project) PS> git clone https://github.com/pjkundert/cpppo_positioner.git
+     : (SMC-Project) PS> cd cpppo_positioner
+     : (SMC-Project) PS> python -m pip install .[all,tests]
+     : (SMC-Project) PS> $env:SERIAL_TEST="COM"; python -m pytest -k position -v --capture=no --log-cli-level=25
      : ...
      : smc_test.py::test_smc_position
      : ---------------------------------------------------- live log call ----------------------------------------------------

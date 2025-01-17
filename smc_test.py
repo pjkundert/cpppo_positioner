@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import pytest
 import re
@@ -12,13 +13,14 @@ from contextlib import suppress
 from pymodbus.framer import FramerType
 from pymodbus.datastore import ModbusServerContext, ModbusSlaveContext, ModbusSparseDataBlock
 
+import serial.tools.list_ports
+
 import cpppo
 from cpppo.remote.pymodbus_fixes import modbus_server_rtu
 from cpppo.modbus_test import start_modbus_simulator
 
 from . import smc
 
-import logging
 cpppo.log_cfg['level']		= logging.DETAIL
 logging.basicConfig( **cpppo.log_cfg )
 
@@ -53,6 +55,11 @@ PORT_SLAVES			= {
     PORT_SLAVE_1: [1,3],
     PORT_SLAVE_2: [2,4],
 }
+
+PORT_LIST			= list( p.name for p in serial.tools.list_ports.comports() )
+logging.warning( "Detected serial ports: {PORT_LIST!r}".format( PORT_LIST=PORT_LIST ))
+if PORT_MASTER not in PORT_LIST:
+    logging.warning( "PORT_MASTER: {PORT_MASTER} is NOT in serial PORT_LIST!".format( PORT_MASTER=PORT_MASTER ))
 
 
 def simulated_actuator( tty ):
