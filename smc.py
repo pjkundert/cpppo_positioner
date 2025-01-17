@@ -52,7 +52,7 @@ POLL_RATE			= .5		# Nyquist Rate for 1Hz Updates
 
 
 # 
-# 00000 - Y - Coils (I/O)
+# 00001 - Y - Coils (I/O)
 # 10001 - X - Discrete Inputs
 # 40001 - D - Holding Registers
 # 

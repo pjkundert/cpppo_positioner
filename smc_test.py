@@ -87,13 +87,106 @@ def simulated_actuator( tty ):
     )
 
 
+async def asyncio_actuator_updater( context ):
+    """Update values in server.
+
+    This task runs continuously beside the server, looking at the units in the context, and
+    attempting to respond somewhat like an SMC Actuator would, to a positioning request.
+
+    It should be noted that getValues and setValues are not safe against concurrent use.  However,
+    we'll be reading input value (that are written by the client), and updating output values (that
+    are only polled by the client).
+
+    """
+    logging.warning( "SMC Actuator Updater running on units {units}".format( units=context.slaves() ))
+    #fc_as_hex = 3  # 1 --> Coil, 2 --> Discrete, 3 --> Holding, 4 --> Input
+    fc_coil = 1
+    fc_disc = 2  # noqa: F841
+    fc_hold = 3
+    fc_inpu = 4  # noqa: F841
+
+    #address = 0x10
+    #count = 6
+
+    # set values to zero
+    #values = context[unit].getValues(fc_as_hex, address, count=count)
+    #values = [0 for v in values]
+    #context[unit].setValues(fc_as_hex, address, values)
+
+    #txt = (
+    #    f"updating_task: started: initialised values: {values!s} at address {address!s}"
+    #)
+    #print(txt)
+    #_logger.debug(txt)
+
+    # Responding loop; see smc.py smc_modbus.position
+    # 1   - Set internal flag Y30 (input invalid flag)
+    # 2   - Write 1 to internal flag Y19 (SVON)
+    # 2a  -   and confirm internal flag X49 (SVRE) has become "1"
+    # 3   - Write 1 to internal flag Y1C (SETUP)
+    # 3a  -   and confirm internal flag X4A (SETON) has become "1"
+    # 4   - Write data to D9102-D9110
+    # 5   - Write Operation Start instruction "1" to D9100 (returns to 0 after processed)
+
+    STARTED			= { u:None for u in context.slaves() } # Toggle On --> Off after sleep
+    while True:
+      await asyncio.sleep(1)
+      for unit in context.slaves():
+
+        if STARTED[unit]:
+            logging.warning( "SMC Actuator Simulator unit {unit}; START (== {START}) ==> START (0): Positioning Complete".format(
+                unit=unit, START=STARTED[unit],
+            ))
+            context[unit].setValues( fc_hold, smc.data.operation_start.addr-40001, [0] )
+
+        # Read SVON Coil, write same value to SVRE Discrete
+        SVON			= context[unit].getValues( fc_coil, smc.data.Y19_SVON.addr-1, count=1 )[0]
+        SVRE			= context[unit].getValues( fc_disc, smc.data.X49_SVRE.addr-10001, count=1 )[0]
+        logging.warning( "SMC Actuator Simulator unit {unit}; SVON:  {SVON!r},  SVRE: {SVRE!r}".format(
+            unit=unit, SVON=SVON, SVRE=SVRE ))
+        if bool( SVON ) != bool( SVRE ):
+            logging.warning( "SMC Actuator Simulator unit {unit}; SVON (== {SVON}) ==> SVRE ({SVRE})".format(
+                unit=unit, SVON=SVON, SVRE=SVON,
+            ))
+            context[unit].setValues( fc_disc, smc.data.X49_SVRE.addr-10001, [SVON] )
+
+        # Read SETUP, write same value to SETON
+        SETUP			= context[unit].getValues( fc_coil, smc.data.Y1C_SETUP.addr-1, count=1 )[0]
+        SETON			= context[unit].getValues( fc_disc, smc.data.X4A_SETON.addr-10001, count=1 )[0]
+        logging.warning( "SMC Actuator Simulator unit {unit}; SETUP: {SETUP!r}, SETON: {SETON!r}".format(
+            unit=unit, SETUP=SETUP, SETON=SETON ))
+        if bool( SETUP ) != bool( SETON ):
+            logging.warning( "SMC Actuator Simulator unit {unit}; SETUP (== {SETUP}) ==> SETON ({SETON})".format(
+                unit=unit, SETUP=SETUP, SETON=SETUP,
+            ))
+            context[unit].setValues( fc_disc, smc.data.X4A_SETON-10001, [SETUP] )
+
+        # Read OPERATION_START (40001.. Holding); when set, clear INPUT_INVALID (1.. Coil) and vice.versa
+        STARTED[unit]		= context[unit].getValues( fc_hold, smc.data.operation_start.addr-40001, count=1 )[0]
+        INVALID			= context[unit].getValues( fc_coil, smc.data.Y30_INPUT_INVALID.addr-1, count=1 )[0]
+        logging.warning( "SMC Actuator Simulator unit {unit}; START: {START!r}, INVAL: {INVAL!r}".format(
+            unit=unit, START=STARTED[unit], INVAL=INVALID ))
+        if bool( STARTED[unit] ) == bool( INVALID ):
+            logging.warning( "SMC Actuator Simulator unit {unit}; START (== {START}) ==> INVALID ({INVALID})".format(
+                unit=unit, START=STARTED[unit], INVALID=not bool( STARTED[unit] ),
+            ))
+            context[unit].setValues( fc_coil, smc.data.Y30_INPUT_INVALID.addr-1, [not bool( STARTED[unit] )] )
+
+        #values = context[unit].getValues(fc_as_hex, address, count=count)
+        #values = [v + 1 for v in values]
+        #context[unit].setValues(fc_as_hex, address, values)
+
+        #txt = f"updating_task: incremented values: {values!s} at address {address!s}"
+        #print(txt)
+        #_logger.debug(txt)
+
+
 def asyncio_actuator( tty ):
     """Initiates an asyncio-run Modbus/RTU actuator (registers only) in a Thread.
 
-    
+    Executes an asyncio task to respond to positioning inputs with correct outputs.
 
     """
-
 
     #    '    17 -     64 = 0',	# Coil           0x10   - 0x30   (     1 +) (rounded to 16 bits)
     #    ' 10065 -  10080 = 0',	# Discrete Input 0x40   - 0x4F   ( 10001 +)
@@ -127,7 +220,24 @@ def asyncio_actuator( tty ):
             },
         )
 
-        server			= modbus_server_rtu(
+        # When communication is established, initiate the actuator updater task
+        class modbus_server_actuator( modbus_server_rtu ):
+            def callback_communication(self, established):
+                if hasattr( self, 'updater_task' ):
+                    if not established:
+                        # If the updater_task has been created, cancel it
+                        logging.warning( "SMC Actuator Positioning Updater stopping" )
+                        self.updater_task.cancel()
+                else:
+                    if established:
+                        logging.warning( "SMC Actuator Positioning Updater starting" )
+                        self.updater_task = asyncio.create_task( asyncio_actuator_updater(
+                            context	= self.context,
+                        ))
+                        self.updater_task.set_name( "SMC Actuator Positioning" )
+                super(modbus_server_actuator, self).callback_communication( established )
+
+        server			= modbus_server_actuator(
             port	= port,
             context	= context,
             framer	= FramerType.RTU,
@@ -231,9 +341,6 @@ def test_smc_basic( simulated_actuator_1 ):  # , simulated_actuator_2 ): # pymod
     '''
 
     positioner.close()
-
-
-def 
 
 
 def test_smc_position( simulated_actuator_1 ):
