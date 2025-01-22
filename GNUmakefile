@@ -5,10 +5,9 @@
 # PY[23] is the target Python interpreter.  It must have pytest installed.
 SHELL		= /bin/bash
 
-PY2		?= python2
-PY2_V		= $(shell $(PY2) -c "import sys; print('-'.join((next(iter(filter(None,sys.executable.split('/')))),sys.platform,sys.subversion[0].lower(),''.join(map(str,sys.version_info[:2])))))"  )
-PY3		?= python3
-PY3_V		= $(shell $(PY3) -c "import sys; print('-'.join((next(iter(filter(None,sys.executable.split('/')))),sys.platform,sys.implementation.cache_tag)))" 2>/dev/null )
+PY3		?= $(shell python3 --version >/dev/null 2>&1 && echo python3 || echo python )
+PY3_P		= $(shell which $(PY3))
+PY3_V		= $(shell $(PY3) -c "import sys; print('-'.join((('venv' if sys.prefix != sys.base_prefix else next(iter(filter(None,sys.base_prefix.split('/'))))),sys.platform,sys.implementation.cache_tag)))" 2>/dev/null )
 
 VERSION		= $(shell $(PY3) -c 'exec(open("version.py").read()); print( __version__ )')
 WHEEL		= dist/cpppo_positioner-$(VERSION)-py3-none-any.whl
@@ -114,16 +113,21 @@ install-%:  # ...-dev, -tests
 # venv:		Create a Virtual Env containing the installed repo
 #
 .PHONY: venv
+
+venv-%:			$(VENV)
+	@echo; echo "*** Running in $< VirtualEnv: make $*"
+	@bash --init-file $</bin/activate -ic "make $*"
+
 venv:			$(VENV)
 	@echo; echo "*** Activating $< VirtualEnv for Interactive $(SHELL)"
 	@bash --init-file $</bin/activate -i
 
 $(VENV):
+	@[[ "$(PY3_V)" =~ "^venv" ]] && ( echo -e "\n\n!!! $@ Cannot start a venv within a venv"; false ) || true
 	@echo; echo "*** Building $@ VirtualEnv..."
-	@rm -rf $@ && $(PY3) -m venv $(VENV_OPTS) $@ \
+	@rm -rf $@ && $(PY3) -m venv $(VENV_OPTS) $@ && sed -i ''  '1s:^:. $$HOME/.bashrc\n:' $@/bin/activate \
 	    && source $@/bin/activate \
 	    && make install install-tests
-
 
 
 #
@@ -138,17 +142,19 @@ $(VENV):
 # other Python version targets.
 #
 nix-%:
-	nix-shell $(NIX_OPTS) --run "make $*"
+	@if [ -r flake.nix ]; then \
+	    nix develop $(NIX_OPTS) --command make $*; \
+        else \
+	    nix-shell $(NIX_OPTS) --run "make $*"; \
+	fi
 
 
 # Run only tests with a prefix containing the target string, eg test-blah
 test-%:
 	$(PY3TEST) *$*_test.py
-#	$(PY2TEST) *$*_test.py
 
 unit-%:
 	$(PY3TEST) -k $*
-#	$(PY2TEST) -k $*
 
 
 #
