@@ -40,7 +40,7 @@ WHEEL		= dist/cpppo_positioner-$(VERSION)-py3-none-any.whl
 # 
 
 # To see all pytest output, uncomment --capture=no
-PYTESTOPTS	= -v # --capture=no --log-cli-level=25 # 25 NORMAL 23 DETAIL 
+PYTESTOPTS	= -v # --capture=no --log-cli-level=INFO # 25 NORMAL 23 DETAIL 
 
 # Preferred timezone for tests.  If you change this, then you will probably have
 # to augment history_test.py to include checking for timestamp.local output in
@@ -125,7 +125,9 @@ venv:			$(VENV)
 $(VENV):
 	@[[ "$(PY3_V)" =~ "^venv" ]] && ( echo -e "\n\n!!! $@ Cannot start a venv within a venv"; false ) || true
 	@echo; echo "*** Building $@ VirtualEnv..."
-	@rm -rf $@ && $(PY3) -m venv $(VENV_OPTS) $@ && sed -i ''  '1s:^:. $$HOME/.bashrc\n:' $@/bin/activate \
+	@rm -rf $@ && $(PY3) -m venv $(VENV_OPTS) $@ \
+	    && ls -l $@/bin \
+	    && sed -i -e "1s:^:. $$HOME/.bashrc\n:" $@/bin/activate \
 	    && source $@/bin/activate \
 	    && make install install-tests
 

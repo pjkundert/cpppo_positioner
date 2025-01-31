@@ -32,6 +32,7 @@ import time
 
 import cpppo
 import serial
+import tabulate
 
 from cpppo.remote.pymodbus_fixes import modbus_client_rtu, Defaults
 from cpppo.remote.plc_modbus import poller_modbus
@@ -310,9 +311,16 @@ class smc_modbus( modbus_client_rtu ):
     def check( self, predicate, deadline=None ):
         """Check if 'predicate' comes True before 'deadline', every self.rate seconds"""
         done			= predicate()
+        start			= cpppo.timer()
         while not done and ( deadline is None or cpppo.timer() < deadline ):
             time.sleep( self.rate if deadline is None
                         else min( self.rate, max( 0, deadline - cpppo.timer() )))
+            if logging.getLogger().isEnabledFor( logging.INFO ):
+                logging.info( "After {dur:7.2f}s of {ded}:\n{tab}".format(
+                    dur		= cpppo.timer() - start,
+                    ded		= None if not deadline else round( deadline - start, 2 ),
+                    tab		= tabulate.tabulate( self.status().items(), headers=["I/O", "Value"], tablefmt='orgtbl' )
+                ))
             done		= predicate()
         return done
 
