@@ -136,15 +136,36 @@ async def asyncio_actuator_updater( context ):
     # 5   - Write Operation Start instruction "1" to D9100 (returns to 0 after processed)
 
     STARTED			= { u:None for u in context.slaves() } # Toggle On --> Off after sleep
+    RESET			= { u:None for u in context.slaves() } # Observe Off -> On resets ALARM
     while True:
       await asyncio.sleep(1)
       for unit in context.slaves():
-
+       try:
+        # If a unit positioning had been started, toggle off the flag
         if STARTED[unit]:
             logging.normal( "SMC Actuator Simulator unit {unit}; START (== {START}) ==> START (0): Positioning Complete".format(
                 unit=unit, START=STARTED[unit],
             ))
             context[unit].setValues( fc_hold, smc.data.operation_start.addr-40001, [0] )
+
+        # If a reset->RESET edge has been indicated, clear any existing X4F_ALARM (reverse logic)
+        if context[unit].getValues( fc_coil, smc.data.Y1B_RESET.addr-1, count=1 )[0]:
+            if not RESET[unit]:
+                # Rising reset-->RESET edge
+                logging.detail( "SMC Actuator Simulator unit {unit}; reset --> RESET".format(
+                    unit=unit ))
+                ALARM		= context[unit].getValues( fc_disc, smc.data.X4F_ALARM.addr-10001, count=1 )[0]
+                if ALARM == 0:
+                    logging.detail( "SMC Actuator Simulator unit {unit}; ALARM:  {ALARM!r} (==> {state})  *CLEAR ALARM* (due to RESET)".format(
+                        unit=unit, ALARM=ALARM, state='is Clear' if ALARM else 'is SET' ))
+                    context[unit].setValues( fc_disc, smc.data.X4F_ALARM.addr-10001, [1] )
+                RESET[unit]		= True
+        else:
+            if RESET[unit]:
+                # Falling RESET-->reset edge
+                logging.detail( "SMC Actuator Simulator unit {unit}; RESET --> reset".format(
+                    unit=unit ))
+                RESET[unit]			= False
 
         # Read SVON Coil, write same value to SVRE Discrete
         SVON			= context[unit].getValues( fc_coil, smc.data.Y19_SVON.addr-1, count=1 )[0]
@@ -155,7 +176,7 @@ async def asyncio_actuator_updater( context ):
             logging.detail( "SMC Actuator Simulator unit {unit}; SVON (== {SVON}) ==> SVRE ({SVRE})".format(
                 unit=unit, SVON=SVON, SVRE=SVON,
             ))
-            context[unit].setValues( fc_disc, smc.data.X49_SVRE.addr-10001, [SVON] )
+            context[unit].setValues( fc_disc, smc.data.X49_SVRE.addr-10001, [1 if SVON else 0] )
 
         # Read SETUP, write same value to SETON
         SETUP			= context[unit].getValues( fc_coil, smc.data.Y1C_SETUP.addr-1, count=1 )[0]
@@ -166,7 +187,7 @@ async def asyncio_actuator_updater( context ):
             logging.detail( "SMC Actuator Simulator unit {unit}; SETUP (== {SETUP}) ==> SETON ({SETON})".format(
                 unit=unit, SETUP=SETUP, SETON=SETUP,
             ))
-            context[unit].setValues( fc_disc, smc.data.X4A_SETON-10001, [SETUP] )
+            context[unit].setValues( fc_disc, smc.data.X4A_SETON-10001, [1 if SETUP else 0] )
 
         # Read OPERATION_START (40001.. Holding); when set, clear INPUT_INVALID (1.. Coil) and vice.versa
         STARTED[unit]		= context[unit].getValues( fc_hold, smc.data.operation_start.addr-40001, count=1 )[0]
@@ -179,13 +200,20 @@ async def asyncio_actuator_updater( context ):
             ))
             context[unit].setValues( fc_coil, smc.data.Y30_INPUT_INVALID.addr-1, [not bool( STARTED[unit] )] )
 
-        #values = context[unit].getValues(fc_as_hex, address, count=count)
-        #values = [v + 1 for v in values]
-        #context[unit].setValues(fc_as_hex, address, values)
-
-        #txt = f"updating_task: incremented values: {values!s} at address {address!s}"
-        #print(txt)
-        #_logger.debug(txt)
+        # While HOLD is set, turns on ALARM; when HOLD is cleared, clears ALARM.  This is probably
+        # not what a real device does, but we need something to set the ALARM and it seems close in
+        # concept to the STOP signal used by other SMC devices, so that's what we'll do...  However,
+        # we won't reset it when HOLD is released, so we can test the ALARM reset procedure.
+        HOLD			= context[unit].getValues( fc_coil, smc.data.Y18_HOLD.addr-1, count=1 )[0]
+        ALARM			= context[unit].getValues( fc_disc, smc.data.X4F_ALARM.addr-10001, count=1 )[0]
+        logging.info( "SMC Actuator Simulator unit {unit}; HOLD: {HOLD!r}, ALARM: {ALARM!r} (reverse logic)".format(
+            unit=unit, HOLD=HOLD, ALARM=ALARM ))
+        if HOLD and ALARM:  # Alarm is reverse logic; ALARM ==> ALARM Clear (NOT in ALARM state)
+            logging.detail( "SMC Actuator Simulator unit {unit}; *SET ALARM* (due to HOLD)".format(
+                unit=unit ))
+            context[unit].setValues( fc_disc, smc.data.X4F_ALARM.addr-10001, [0] )  # 0 ==> ALARM Set
+       except Exception as exc:
+        logging.warning( "Failed simulator loop: {exc}".format( exc=exc ))
 
 
 def asyncio_actuator( tty ):
@@ -336,6 +364,18 @@ def test_smc_basic( simulated_actuator_1 ):  # , simulated_actuator_2 ): # pymod
         time.sleep( .1 )
         status			= positioner.status( actuator=1 )
     assert status['current_position'] == 15000
+
+    # Observe that we can detect and reset an alarm.  Se the alarm (reverse logic).  Set an
+    # alarm by setting HOLD, and then clear the ALARM
+    positioner.outputs( "HOLD", actuator=1 )
+    #unit.write( smc.data.Y18_HOLD.addr, True )
+    time.sleep( 2 )  # twice simulator response cycle
+    positioner.outputs( "hold", actuator=1 )
+    #unit.write( smc.data.Y18_HOLD.addr, False )
+    alarm = positioner.alarm()  # Will forget (force poll) and reset by default
+    assert alarm is not None and not alarm  # ALARM is Set (reverse logic)
+    alarm = positioner.alarm()
+    assert alarm is not None and alarm      # ALARM is Clear (reverse logic)
 
     # Stock pymodbus fails (cannot handle RS-485 multi-drop).
     # - Install github.com/pjkundert/pymodbus.git@fix/decode to test?

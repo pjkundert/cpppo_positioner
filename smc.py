@@ -324,7 +324,7 @@ class smc_modbus( modbus_client_rtu ):
             done		= predicate()
         return done
 
-    def outputs( self, actuator, *flags ):
+    def outputs( self, *flags, actuator=1 ):
         """Set one or more 'flag' matching 'NAME' (or clear it, if all lower case 'name' used).  Only
         Y... (Coils) may be written.  The available flags are:
         
@@ -346,10 +346,40 @@ class smc_modbus( modbus_client_rtu ):
             key			= [ k for k in data.iterkeys( depth=0 )
                                     if k.startswith( 'Y' ) and k.endswith( NAM ) ]
             assert len( key ) == 1 and f in (NAM,nam), "invalid/ambiguous key name %s: %r" % ( f, key )
-            val			= bool( f == NAM )
+            val			= 1 if f == NAM else 0
             logging.detail( "%s/%-8s <== %s", unit.description, f, val )
             unit.write( data[key[0]].addr, val )
         return self.status( actuator=actuator )
+
+    def alarm( self, actuator=1, forget=True, reset=True, timeout=None ):
+        """Detects if the alarm register is set (X4B_ALARM is reverse logic, so 0 --> set) .
+
+        Optionally 'forget' any currently stored X4B_ALARM value, forcing polling of fresh data.
+        Optionally 'reset' the alarm.
+
+        Returns the value of the alarm register (before the optional reset), or None if unable to
+        poll.
+
+        """
+        begin			= cpppo.timer()
+        if timeout is None:
+            timeout		= self.TIMEOUT
+        unit			= self.unit( uid=actuator )
+        if forget:
+            unit.forget( data.X4F_ALARM.addr )  # Ensure we check freshly polled data
+        detected		= self.check(
+            predicate=lambda: unit.read( data.X4F_ALARM.addr ) is not None,
+            deadline=None if timeout is None else begin + timeout )
+        alarm			= unit.read( data.X4F_ALARM.addr )
+        if alarm is not None and not alarm and reset:  # alarm is reverse logic!
+            self.outputs( "RESET", actuator=actuator )
+            if not self.check(
+                    predicate=lambda: unit.read( data.X4F_ALARM.addr ) != 0,
+                    deadline=None if timeout is None else begin + timeout ):
+                logging.warning( "%s/X4F_ALARM: Failed to RESET", unit.description )
+            self.outputs( "reset", actuator=actuator )
+
+        return alarm  # None, 0 ==> Set (in alarm), !0 ==> Reset (no alarm)
 
     def complete( self, actuator=1, svoff=False, timeout=None ):
         """Ensure that any prior operation on the actuator is complete w/in timeout; return True iff the
@@ -385,6 +415,7 @@ class smc_modbus( modbus_client_rtu ):
 
         Running with specified data
 
+        0   - Await completion of prior positioning request
         1   - Set internal flag Y30 (input invalid flag)
         2   - Write 1 to internal flag Y19 (SVON)
         2a  -   and confirm internal flag X49 (SVRE) has become "1"
@@ -392,6 +423,7 @@ class smc_modbus( modbus_client_rtu ):
         3a  -   and confirm internal flag X4A (SETON) has become "1"
         4   - Write data to D9102-D9110
         5   - Write Operation Start instruction "1" to D9100 (returns to 0 after processed)
+        5a  - If svoff specified, await completion and turn off servo
 
         If no positioning kwds are provided, then no new position is configured.  If 'noop' is True,
         everything except the final activation is performed.
@@ -400,8 +432,11 @@ class smc_modbus( modbus_client_rtu ):
         begin			= cpppo.timer()
         if timeout is None:
             timeout		= self.TIMEOUT
-        assert self.complete( actuator=actuator, svoff=svoff, timeout=timeout ), \
+
+        # 0: Await completion of prior positioning request; does *NOT* disable servo
+        assert self.complete( actuator=actuator, svoff=False, timeout=timeout ), \
             "Previous actuator position incomplete within timeout %r" % timeout
+
         status			= self.status( actuator=actuator )
         if not kwds:
             return status
@@ -472,5 +507,9 @@ class smc_modbus( modbus_client_rtu ):
                 deadline=None if timeout is None else begin + timeout )
             assert started, \
                 "Failed to detect positioning start within timeout"
+            # 5a: If svoff specified, await completion and turn Servo off.
+            if svoff:
+                assert self.complete( actuator=actuator, svoff=True, timeout=timeout ), \
+                    "Current actuator position incomplete within timeout %r" % timeout
 
         return self.status( actuator=actuator )

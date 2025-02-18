@@ -314,7 +314,36 @@
   discard the instance and create a new one.
 
 
-1.4.3 `.position' – Complete operation, Initiate new position
+1.4.3 `.alarm' – Test for alarm condition
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
+  The .alarm returns the current ALARM condition (in *reverse* logic) if
+  the device is available, or None:
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Value  Description                        
+  ───────────────────────────────────────────
+   None   No ALARM condition value available 
+   0      ALARM condition is *Set*           
+   !0     ALARM condition is *Clear*         
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────
+  │ alarm_value = gateway.alarm( actuator=1 )  # Detect ALARM value, and if Set then clear it
+  └────
+
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   keyword   default  description                                                         
+  ────────────────────────────────────────────────────────────────────────────────────────
+   actuator  1        The actuator number to operate on                                   
+   forget    True     Ignore the current stored value, and attempt to poll within timeout 
+   reset     True     If ALARM condition found to be *Set*, clear it                      
+   timeout   None     Allowed number of seconds to complete (forever if None)             
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+1.4.4 `.position' – Complete operation, Initiate new position
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   The .position method checks that any current position operation is
@@ -322,19 +351,20 @@
   position operation.  If no new data is provided (eg. only `actuator'
   and/or `timeout' provided), then only the operation completion is
   checked; no new positioning operation is initiated.
+
   ┌────
   │ gateway.position( actuator=1, timeout=10.0, position=12345, speed=100, ... )
   └────
 
 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   keyword   description                                               
-  ─────────────────────────────────────────────────────────────────────
-   actuator  The actuator number to operate on                         
-   timeout   Allowed number of seconds to complete (forever if None)   
-   svoff     If positioning complete, turn off servo                   
-   noop      Don't return home, write new step data but don't initiate 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   keyword   default  description                                               
+  ──────────────────────────────────────────────────────────────────────────────
+   actuator  1        The actuator number to operate on                         
+   svoff     False    If positioning complete, turn off servo                   
+   noop      False    Don't return home, write new step data but don't initiate 
+   timeout   None     Allowed number of seconds to complete (forever if None)   
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   The full set of positioning parameters defined by the SMC actuator is:
 
@@ -381,7 +411,7 @@
   └────
 
 
-1.4.4 `.complete' – Check for completion
+1.4.5 `.complete' – Check for completion
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Confirms that any previous actuator positioning operation is complete,
@@ -391,13 +421,13 @@
   If you wish, you may invoke the `.complete' method directly (instead
   of implicitly at the beginning of every `.position' invocation).
 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   keyword   description                                             
-  ───────────────────────────────────────────────────────────────────
-   actuator  The actuator number to operate on                       
-   timeout   Allowed number of seconds to complete (forever if None) 
-   svoff     If positioning complete, turn off servo                 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   keyword   default  description                                             
+  ────────────────────────────────────────────────────────────────────────────
+   actuator  1        The actuator number to operate on                       
+   timeout   None     Allowed number of seconds to complete (forever if None) 
+   svoff     False    If positioning complete, turn off servo                 
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   To check for completion and then disable servo within timeout of 3
   seconds:
@@ -406,12 +436,11 @@
   └────
 
 
-1.4.5 `.outputs' – Set/clear outputs (Coils)
+1.4.6 `.outputs' – Set/clear outputs (Coils)
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
-  Modifies one or more named outputs (Coils) on the specified actuator.
-  An integer actuator number is required, followed by optional flags (a
-  variable number of positional parameters)
+  Modifies one or more named outputs (Coils) on the specified actuator;
+  a variable number of positional parameters:
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    flags          description 
@@ -427,18 +456,30 @@
    INPUT_INVALID              
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  ┌────
+  │ gateway.outputs( "hold", "RESET", actuator=1 )  # clears HOLD, and sets RESET on SMC #1
+  └────
 
-1.4.6 `.status' – Return full status and position data
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   keyword   default  description                                             
+  ────────────────────────────────────────────────────────────────────────────
+   *flags    []       Positional parameters for each flag to "SET" or "reset" 
+   actuator  1        The actuator number to operate on                       
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+1.4.7 `.status' – Return full status and position data
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Returns the current complete set of status and data values for the
   actuator.  If any value has not yet been polled, it will be `None'.
 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   keyword   description                       
-  ─────────────────────────────────────────────
-   actuator  The actuator number to operate on 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   keyword   default  description                       
+  ──────────────────────────────────────────────────────
+   actuator        1  The actuator number to operate on 
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Here is an example (formatted for readability):
   ┌────
@@ -494,14 +535,14 @@
   └────
 
 
-1.4.7 `.close' – Terminate polling of serial port, close device
+1.4.8 `.close' – Terminate polling of serial port, close device
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   Ceases I/O to all actuators on RS485 circuit and releases the serial
   device.
 
 
-1.4.8 Command- or Pipe-line usage
+1.4.9 Command- or Pipe-line usage
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 
   An executable module entry point (`python -m cpppo_positioner'), and a
@@ -557,7 +598,7 @@
   actuator #1!)
 
 
-◊ 1.4.8.1 Quoting double-quotes on Windows Powershell
+◊ 1.4.9.1 Quoting double-quotes on Windows Powershell
 
   Note that on Windows Cmd or Powershell, it is very difficult to quote
   double-quote characters in strings.  In Powershell, you need to use
@@ -594,7 +635,7 @@
   Windows.  Trust me; this is just the tip of the iceberg…
 
 
-◊ 1.4.8.2 Update on Windows Powershell Quoting
+◊ 1.4.9.2 Update on Windows Powershell Quoting
 
   Powershell appears to have updated its escape handling.  Using the
   `$position' environment variable approach still doesn't work, but the

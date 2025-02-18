@@ -274,8 +274,9 @@ def main( argv=None, idle_service=None, **kwds ):
             # A position dict in 'dat'; attempt to position to it.  We'll wait forever to establish a
             # connection to the gateway, and then attempt each positioning command until it succeeds.
             logging.normal( "Position: actuator %3s parsed ; params: %r", dat.get( 'actuator', 'N/A' ), dat )
-        elif isinstance( dat, list ) and dat and isinstance( dat[0], int ):
-            # An [ <actuator>, "FLAG", "flag", ... ] 
+        elif isinstance( dat, list ) and dat:
+            # A list of flags to SET/clear, optionally prefixed by a numeric actuator number:
+            # An [ <actuator>, "FLAG", "flag", ... ]
             logging.normal( "Outputs : actuator %3s parsed ; params: %r", dat[0], dat[1:] )
         else:
             logging.warning( "Unknown command: %s: %r", type( dat ), dat )
@@ -300,7 +301,10 @@ def main( argv=None, idle_service=None, **kwds ):
             # just confirm that the previous positioning operation is complete.
             try:
                 if isinstance( dat, list ):
-                    status	= gateway.outputs( *dat )
+                    if isinstance( dat[0], int ):
+                        status	= gateway.outputs( *dat[1:], actuator=dat[0] )
+                    else:
+                        status	= gateway.outputs( *dat )  # All are flags; default actuator
                 else:
                     status	= gateway.position( **dat )
                 success	       += 1
