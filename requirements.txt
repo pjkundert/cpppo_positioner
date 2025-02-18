@@ -1,4 +1,4 @@
-cpppo			>=5.2.4
+cpppo			>=5.2.5
 pyserial		>=3.5
 pymodbus		==3.8.1
 tabulate-slip39		>=0.10.0

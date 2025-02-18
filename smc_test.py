@@ -373,6 +373,7 @@ def test_smc_position( simulated_actuator_1 ):
     unit.write( smc.data.X4B_INP.addr, False ) # Positioning complete
     waits.waitfor( positioner.status()['X4B_INP'] is False, "positioner polled", timeout=1 )
     '''
+    # This is the example from 7.3 Operation (P12) of LEC-OM02201.
     status			= positioner.position(
         actuator	= 1,
         position	= 0,
@@ -384,9 +385,11 @@ def test_smc_position( simulated_actuator_1 ):
         trigger_level	= 0,
         pushing_speed	= 20,
         moving_force	= 100,
-        in_position	= 100,
         home		= False,
         timeout		= 5,
+        area_1		= int( 0.00 / 0.01 ),	# in 0.01mm units (+/-)
+        area_2		= int( 0.00 / 0.01 ),	# in 0.01mm units (+/-)
+        in_position	= int( 1.00 / 0.01 ),	# in 0.01mm units (+'ve)
     )
 
     assert status['X48_BUSY'] == False, "Should have detected positioning complete: %r" % ( status )

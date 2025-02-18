@@ -260,7 +260,7 @@ class smc_modbus( modbus_client_rtu ):
         return "SMC Modbus/RTU Gateway" + ( ":\n" if out else "" ) + "\n".join( out )
 
     def unit( self, uid ):
-        """Return the poller to access data for the given unit uid.  Force """
+        """Return the poller to access data for the given unit uid."""
         if uid not in self.pollers:
             self.pollers[uid]	= poller_modbus( "SMC %s" % ( uid ), client=self,
                                                  multi=True, unit=uid, rate=self.rate )
@@ -410,10 +410,10 @@ class smc_modbus( modbus_client_rtu ):
         logging.detail( "Position: actuator %3d setdata: %r", actuator, kwds )
         unit			= self.unit( uid=actuator )
 
-        # 1: set INPUT_INVALID
+        # 1: set INPUT_INVALID; enabled operating instructions by serial communication
         unit.write( data.Y30_INPUT_INVALID.addr, 1 )
 
-        # 2: set SVON, check SVRE
+        # 2: set SVON (servo on), check SVRE
         if timeout:
             assert cpppo.timer() <= begin + timeout, \
                 "Failed to complete positioning SVON/SVRE within timeout"
@@ -463,10 +463,12 @@ class smc_modbus( modbus_client_rtu ):
             unit.write( data[k].addr, values )
 
         # 5: set operation_start to 0x0100 (1 in high-order bytes) unless 'noop'
+        # - returns to 0 after operation starts (see 10.2 Running with specified data)
         if not noop:
             unit.write( data.operation_start.addr, 0x0100 )
+            unit.forget( data.operation_start.addr )  # Ensure we check freshly polled data
             started			= self.check(
-                predicate=lambda: unit.read( data.operation_start.addr ) == 0x0100,
+                predicate=lambda: unit.read( data.operation_start.addr ) == 0x0000,
                 deadline=None if timeout is None else begin + timeout )
             assert started, \
                 "Failed to detect positioning start within timeout"
